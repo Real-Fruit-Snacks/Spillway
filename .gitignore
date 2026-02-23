@@ -1,0 +1,29 @@
+# Build artifacts
+bin/
+*.exe
+*.out
+*.test
+*.prof
+/spillway
+/spillway-agent-*
+handler_*.sh
+
+# Secrets / credentials
+*.pem
+*.key
+.env
+.psk
+
+# AI assistant files
+CLAUDE.md
+.claude/
+.omc/
+.cursorignore
+.cursorules
+.cursorrules
+.copilot/
+.github/copilot/
+.aider*
+.codeium/
+.continue/
+.tabby/
