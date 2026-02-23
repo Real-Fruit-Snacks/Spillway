@@ -1066,7 +1066,7 @@
                                 <div class="arch-item-marker">01</div>
                                 <h3>Wire Protocol</h3>
                             </div>
-                            <p>Custom binary encoding: <code>[4B len][1B type][4B id][payload]</code>. Big-endian, length-prefixed strings. 13 filesystem operations, control messages, 16 MiB frame cap.</p>
+                            <p>Custom binary encoding: <code>[4B len][1B type][4B id][payload]</code>. Big-endian, length-prefixed strings. 17 filesystem operations, control messages, 16 MiB frame cap.</p>
                         </div>
                         <div class="arch-item">
                             <div class="arch-item-header">
@@ -1117,9 +1117,9 @@
                     <div class="stat-desc">linux/amd64, linux/arm64, windows/amd64, darwin/amd64, darwin/arm64</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number">13</div>
+                    <div class="stat-number">17</div>
                     <div class="stat-label">FS Operations</div>
-                    <div class="stat-desc">stat, readdir, read, readlink, write, create, mkdir, remove, rename, chmod, truncate, xattr</div>
+                    <div class="stat-desc">stat, readdir, read, readlink, write, create, mkdir, remove, rename, chmod, truncate, xattr, chown, symlink, link, statfs</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-number">0</div>
@@ -1190,6 +1190,36 @@
                             <td>--proxy ADDR</td>
                             <td>HTTP CONNECT proxy address</td>
                             <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>--proxy-user USER</td>
+                            <td>Proxy username (Basic auth)</td>
+                            <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>--proxy-pass PASS</td>
+                            <td>Proxy password (Basic auth)</td>
+                            <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>--rate-limit N</td>
+                            <td>Outbound bandwidth limit (tokens/sec)</td>
+                            <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>--rate-burst N</td>
+                            <td>Rate limit burst size</td>
+                            <td>&mdash;</td>
+                        </tr>
+                        <tr>
+                            <td>--show-key</td>
+                            <td>Display PSK in build summary</td>
+                            <td>false</td>
+                        </tr>
+                        <tr>
+                            <td>--dry-run</td>
+                            <td>Preview build command without executing</td>
+                            <td>false</td>
                         </tr>
                         <tr>
                             <td>--os / --arch</td>

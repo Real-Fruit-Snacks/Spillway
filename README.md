@@ -6,7 +6,7 @@
 
 [![Go 1.22+](https://img.shields.io/badge/go-1.22+-00ADD8.svg)](https://go.dev/dl/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-2196F3.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-60%20passing-brightgreen.svg)](internal/)
+[![Tests](https://img.shields.io/badge/tests-122%20passing-brightgreen.svg)](internal/)
 [![CGO](https://img.shields.io/badge/CGO-disabled-orange.svg)]()
 
 Spillway is a reverse/bind FUSE filesystem mount for penetration testing. Deploy a small agent on the target, mount its entire filesystem locally via FUSE, and browse with standard tools — over TLS 1.3 with mutual PSK authentication. Think of it as SSHFS without SSH, built for offense.
@@ -187,10 +187,15 @@ Spillway/
 │   │   └── proxy.go          # HTTP CONNECT proxy tunneling
 │   ├── agent/
 │   │   ├── agent.go          # Agent main loop, reconnect logic
-│   │   ├── fsops.go          # 13 filesystem operation handlers
+│   │   ├── fsops.go          # 17 filesystem operation handlers
 │   │   ├── pathjail.go       # Path resolution, symlink jail, excludes
 │   │   ├── ratelimit.go      # Token bucket rate limiter
-│   │   └── opsec.go          # Process masquerade, core dumps, self-delete
+│   │   ├── opsec.go          # Process masquerade, core dumps, self-delete
+│   │   ├── opsec_{linux,darwin,windows,other}.go  # Platform-specific opsec
+│   │   ├── selfsigned.go     # Ephemeral ECDSA self-signed certificate
+│   │   ├── sysstat_{linux,darwin,other}.go        # Platform uid/gid extraction
+│   │   ├── statfs_{linux,windows,other}.go        # Platform filesystem stats
+│   │   └── xattr_{unix,other}.go                  # Platform xattr support
 │   ├── fuse/
 │   │   ├── bridge.go         # Bridge interface (FUSE ↔ session)
 │   │   ├── fs.go             # FUSE FS root, error mapping
@@ -200,12 +205,15 @@ Spillway/
 │   ├── listener/
 │   │   ├── listener.go       # Connection accept, session lifecycle
 │   │   └── session.go        # Bridge impl, cache integration
-│   └── cache/
-│       └── cache.go          # TTL cache (stat 5s, dir 5s)
+│   ├── cache/
+│   │   └── cache.go          # TTL cache (stat 5s, dir 5s)
+│   └── config/
+│       └── config.go         # Shared configuration types
 ├── build.sh                  # Agent build orchestrator
 ├── Makefile                  # Build targets
 └── docs/
-    └── index.html            # GitHub Pages site
+    ├── index.html            # GitHub Pages site
+    └── favicon.svg           # Site favicon
 ```
 
 ### Execution Flow
@@ -267,6 +275,10 @@ Spillway/
 | Truncate | `MsgTruncate` | Truncate file to size |
 | GetXattr | `MsgGetXattr` | Read extended attribute by name |
 | ListXattr | `MsgListXattr` | List extended attribute names |
+| Chown | `MsgChown` | Change file ownership (uid/gid) |
+| Symlink | `MsgSymlink` | Create symbolic link |
+| Link | `MsgLink` | Create hard link |
+| Statfs | `MsgStatfs` | Filesystem statistics (total/free/avail) |
 
 ---
 
@@ -303,7 +315,10 @@ All agent configuration is injected at compile time via `-ldflags -X`. The agent
 | Opsec | `--procname NAME` | Process name masquerade (OS-aware default) |
 | Opsec | `--self-delete` | Delete binary after execution |
 | Network | `--proxy ADDR` | HTTP CONNECT proxy address |
-| Network | `--rate-limit N` | Outbound bandwidth limit (bytes/sec) |
+| Network | `--rate-limit N` | Outbound bandwidth limit (tokens/sec) |
+| Network | `--rate-burst N` | Rate limit burst size |
+| Network | `--proxy-user USER` | Proxy username (Basic auth) |
+| Network | `--proxy-pass PASS` | Proxy password (Basic auth) |
 | Platform | `--os OS` | Target OS (linux/windows/darwin) |
 | Platform | `--arch ARCH` | Target architecture (amd64/arm64) |
 | Build | `--all` | Build all 5 platform combinations |
@@ -402,7 +417,7 @@ strings ./target/opt/app/binary | grep -i key
 ## Testing
 
 ```bash
-go test ./...                  # All 60 tests
+go test ./...                  # All 122 tests
 go test -tags agent ./...      # Agent-side tests
 go test -race ./...            # Race detector
 go vet ./...                   # Static analysis
