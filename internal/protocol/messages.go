@@ -33,6 +33,17 @@ type DirEntry struct {
 	Mode  uint32
 }
 
+// StatfsInfo holds filesystem statistics.
+type StatfsInfo struct {
+	TotalBlocks uint64
+	FreeBlocks  uint64
+	AvailBlocks uint64
+	TotalInodes uint64
+	FreeInodes  uint64
+	BlockSize   uint32
+	MaxNameLen  uint32
+}
+
 // Request is a protocol request from listener to agent.
 type Request struct {
 	Type      byte
@@ -44,6 +55,8 @@ type Request struct {
 	Size      int64  // ReadFile size
 	Mode      uint32 // Chmod/Create mode
 	XattrName string // GetXattr name
+	Uid       uint32 // Chown uid
+	Gid       uint32 // Chown gid
 }
 
 // Response is a protocol response from agent to listener.
@@ -54,8 +67,9 @@ type Response struct {
 	Stat    *FileStat
 	Entries []DirEntry
 	Data    []byte
-	Names   []string // ListXattr result
-	Written int64    // WriteFile bytes written
+	Names   []string        // ListXattr result
+	Written int64           // WriteFile bytes written
+	Statfs  *StatfsInfo     // Statfs result
 }
 
 // --- Binary reader helper ---
@@ -96,6 +110,15 @@ func (r *reader) readInt64() (int64, error) {
 		return 0, ErrTruncated
 	}
 	v := int64(binary.BigEndian.Uint64(r.buf[r.pos:]))
+	r.pos += 8
+	return v, nil
+}
+
+func (r *reader) readUint64() (uint64, error) {
+	if r.remaining() < 8 {
+		return 0, ErrTruncated
+	}
+	v := binary.BigEndian.Uint64(r.buf[r.pos:])
 	r.pos += 8
 	return v, nil
 }
@@ -169,6 +192,12 @@ func (w *writer) writeInt64(v int64) {
 	w.buf = append(w.buf, b[:]...)
 }
 
+func (w *writer) writeUint64(v uint64) {
+	var b [8]byte
+	binary.BigEndian.PutUint64(b[:], v)
+	w.buf = append(w.buf, b[:]...)
+}
+
 func (w *writer) writeString(s string) {
 	w.writeUint32(uint32(len(s)))
 	w.buf = append(w.buf, s...)
@@ -217,6 +246,13 @@ func MarshalRequest(req *Request) []byte {
 		w.writeInt64(req.Size)
 	case MsgGetXattr:
 		w.writeString(req.XattrName)
+	case MsgChown:
+		w.writeUint32(req.Uid)
+		w.writeUint32(req.Gid)
+	case MsgSymlink:
+		w.writeString(req.Path2)
+	case MsgLink:
+		w.writeString(req.Path2)
 	}
 
 	return w.bytes()
@@ -268,6 +304,15 @@ func UnmarshalRequest(data []byte) (*Request, error) {
 		req.Size, err = r.readInt64()
 	case MsgGetXattr:
 		req.XattrName, err = r.readString()
+	case MsgChown:
+		req.Uid, err = r.readUint32()
+		if err == nil {
+			req.Gid, err = r.readUint32()
+		}
+	case MsgSymlink:
+		req.Path2, err = r.readString()
+	case MsgLink:
+		req.Path2, err = r.readString()
 	}
 	if err != nil {
 		return nil, err
@@ -312,10 +357,23 @@ func MarshalResponse(resp *Response) []byte {
 		for _, name := range resp.Names {
 			w.writeString(name)
 		}
+	case MsgStatfsResp:
+		if resp.Statfs == nil {
+			w.writeByte(0)
+		} else {
+			w.writeByte(1)
+			w.writeUint64(resp.Statfs.TotalBlocks)
+			w.writeUint64(resp.Statfs.FreeBlocks)
+			w.writeUint64(resp.Statfs.AvailBlocks)
+			w.writeUint64(resp.Statfs.TotalInodes)
+			w.writeUint64(resp.Statfs.FreeInodes)
+			w.writeUint32(resp.Statfs.BlockSize)
+			w.writeUint32(resp.Statfs.MaxNameLen)
+		}
 	case MsgAuthResp:
 		w.writeBytes(resp.Data)
-		// MsgMkdirResp, MsgRemoveResp, MsgRenameResp, MsgChmodResp, MsgCreateResp, MsgTruncateResp:
-		// no extra payload beyond error.
+		// MsgMkdirResp, MsgRemoveResp, MsgRenameResp, MsgChmodResp, MsgCreateResp, MsgTruncateResp,
+		// MsgChownResp, MsgSymlinkResp, MsgLinkResp: no extra payload beyond error.
 	}
 
 	return w.bytes()
@@ -397,6 +455,31 @@ func UnmarshalResponse(data []byte) (*Response, error) {
 				if err != nil {
 					break
 				}
+			}
+		}
+	case MsgStatfsResp:
+		var marker byte
+		marker, err = r.readByte()
+		if err == nil && marker != 0 {
+			resp.Statfs = &StatfsInfo{}
+			resp.Statfs.TotalBlocks, err = r.readUint64()
+			if err == nil {
+				resp.Statfs.FreeBlocks, err = r.readUint64()
+			}
+			if err == nil {
+				resp.Statfs.AvailBlocks, err = r.readUint64()
+			}
+			if err == nil {
+				resp.Statfs.TotalInodes, err = r.readUint64()
+			}
+			if err == nil {
+				resp.Statfs.FreeInodes, err = r.readUint64()
+			}
+			if err == nil {
+				resp.Statfs.BlockSize, err = r.readUint32()
+			}
+			if err == nil {
+				resp.Statfs.MaxNameLen, err = r.readUint32()
 			}
 		}
 	case MsgAuthResp:

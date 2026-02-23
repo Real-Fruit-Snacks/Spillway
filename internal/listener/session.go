@@ -228,3 +228,99 @@ func (s *Session) Rename(oldPath, newPath string) error {
 	s.cache.InvalidatePath(parentDir(newPath))
 	return nil
 }
+
+func (s *Session) Chmod(path string, mode uint32) error {
+	_, err := s.call(&protocol.Request{
+		Type: protocol.MsgChmod,
+		Path: path,
+		Mode: mode,
+	})
+	if err != nil {
+		return err
+	}
+	s.cache.InvalidatePath(path)
+	return nil
+}
+
+func (s *Session) Truncate(path string, size int64) error {
+	_, err := s.call(&protocol.Request{
+		Type: protocol.MsgTruncate,
+		Path: path,
+		Size: size,
+	})
+	if err != nil {
+		return err
+	}
+	s.cache.InvalidatePath(path)
+	return nil
+}
+
+func (s *Session) Chown(path string, uid, gid uint32) error {
+	_, err := s.call(&protocol.Request{
+		Type: protocol.MsgChown,
+		Path: path,
+		Uid:  uid,
+		Gid:  gid,
+	})
+	if err != nil {
+		return err
+	}
+	s.cache.InvalidatePath(path)
+	return nil
+}
+
+func (s *Session) Symlink(target, linkName string) error {
+	_, err := s.call(&protocol.Request{
+		Type:  protocol.MsgSymlink,
+		Path:  target,
+		Path2: linkName,
+	})
+	if err != nil {
+		return err
+	}
+	s.cache.InvalidatePath(linkName)
+	s.cache.InvalidatePath(parentDir(linkName))
+	return nil
+}
+
+func (s *Session) Link(oldPath, newPath string) error {
+	_, err := s.call(&protocol.Request{
+		Type:  protocol.MsgLink,
+		Path:  oldPath,
+		Path2: newPath,
+	})
+	if err != nil {
+		return err
+	}
+	s.cache.InvalidatePath(newPath)
+	s.cache.InvalidatePath(parentDir(newPath))
+	return nil
+}
+
+func (s *Session) Statfs(path string) (*protocol.StatfsInfo, error) {
+	resp, err := s.call(&protocol.Request{Type: protocol.MsgStatfs, Path: path})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Statfs, nil
+}
+
+func (s *Session) Getxattr(path, name string) ([]byte, error) {
+	resp, err := s.call(&protocol.Request{
+		Type:      protocol.MsgGetXattr,
+		Path:      path,
+		XattrName: name,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Data, nil
+}
+
+func (s *Session) Listxattr(path string) ([]string, error) {
+	resp, err := s.call(&protocol.Request{Type: protocol.MsgListXattr, Path: path})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Names, nil
+}

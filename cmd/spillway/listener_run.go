@@ -44,6 +44,7 @@ func printUsage() {
 	fmt.Println("  " + colorMauve + "spillway connect" + colorReset + colorDim + "  HOST:PORT [flags] — connect to agent" + colorReset)
 	fmt.Println("  " + colorMauve + "spillway status" + colorReset + colorDim + "                    — show session info" + colorReset)
 	fmt.Println("  " + colorMauve + "spillway unmount" + colorReset + colorDim + "  MOUNTPOINT        — unmount a session" + colorReset)
+	fmt.Println("  " + colorMauve + "spillway version" + colorReset + colorDim + "                   — show version info" + colorReset)
 	fmt.Println()
 	fmt.Println(colorText + "Flags (listen):" + colorReset)
 	fmt.Println("  " + colorTeal + "-p, --port" + colorReset + "      port to listen on (default 4444)")
@@ -71,6 +72,8 @@ func runListener() error {
 	}
 
 	switch os.Args[1] {
+	case "version", "--version", "-v":
+		return cmdVersion()
 	case "listen":
 		return cmdListen(os.Args[2:])
 	case "connect":
@@ -247,6 +250,19 @@ func decodePSK(pskB64 string) ([]byte, error) {
 		return nil, nil
 	}
 	return base64.StdEncoding.DecodeString(pskB64)
+}
+
+func cmdVersion() error {
+	v := cfgVersion
+	if v == "" {
+		v = "dev"
+	}
+	c := cfgBuildCommit
+	if c == "" {
+		c = "unknown"
+	}
+	fmt.Printf("spillway %s (commit %s)\n", v, c)
+	return nil
 }
 
 // loadCertFiles reads PEM files from disk when paths are provided.

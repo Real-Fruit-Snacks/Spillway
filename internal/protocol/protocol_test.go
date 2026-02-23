@@ -534,6 +534,111 @@ func TestResponseRoundTrip_LargeDirectory(t *testing.T) {
 	}
 }
 
+// --- New message type round-trip tests ---
+
+func TestRequestRoundTrip_Chown(t *testing.T) {
+	req := &Request{Type: MsgChown, ID: 18, Path: "/file", Uid: 1000, Gid: 1000}
+	got := roundTripRequest(t, req)
+	assertEqual(t, "Type", got.Type, MsgChown)
+	assertEqual(t, "Path", got.Path, "/file")
+	assertEqual(t, "Uid", got.Uid, uint32(1000))
+	assertEqual(t, "Gid", got.Gid, uint32(1000))
+}
+
+func TestRequestRoundTrip_Symlink(t *testing.T) {
+	req := &Request{Type: MsgSymlink, ID: 19, Path: "/target", Path2: "/link"}
+	got := roundTripRequest(t, req)
+	assertEqual(t, "Type", got.Type, MsgSymlink)
+	assertEqual(t, "Path", got.Path, "/target")
+	assertEqual(t, "Path2", got.Path2, "/link")
+}
+
+func TestRequestRoundTrip_Link(t *testing.T) {
+	req := &Request{Type: MsgLink, ID: 20, Path: "/original", Path2: "/hardlink"}
+	got := roundTripRequest(t, req)
+	assertEqual(t, "Type", got.Type, MsgLink)
+	assertEqual(t, "Path", got.Path, "/original")
+	assertEqual(t, "Path2", got.Path2, "/hardlink")
+}
+
+func TestRequestRoundTrip_Statfs(t *testing.T) {
+	req := &Request{Type: MsgStatfs, ID: 21, Path: "/"}
+	got := roundTripRequest(t, req)
+	assertEqual(t, "Type", got.Type, MsgStatfs)
+	assertEqual(t, "Path", got.Path, "/")
+}
+
+func TestResponseRoundTrip_Chown(t *testing.T) {
+	resp := &Response{Type: MsgChownResp, ID: 18}
+	got := roundTripResponse(t, resp)
+	assertEqual(t, "Type", got.Type, MsgChownResp)
+	assertEqual(t, "Error", got.Error, "")
+}
+
+func TestResponseRoundTrip_Symlink(t *testing.T) {
+	resp := &Response{Type: MsgSymlinkResp, ID: 19}
+	got := roundTripResponse(t, resp)
+	assertEqual(t, "Type", got.Type, MsgSymlinkResp)
+	assertEqual(t, "Error", got.Error, "")
+}
+
+func TestResponseRoundTrip_Link(t *testing.T) {
+	resp := &Response{Type: MsgLinkResp, ID: 20}
+	got := roundTripResponse(t, resp)
+	assertEqual(t, "Type", got.Type, MsgLinkResp)
+	assertEqual(t, "Error", got.Error, "")
+}
+
+func TestResponseRoundTrip_Statfs(t *testing.T) {
+	info := &StatfsInfo{
+		TotalBlocks: 1000000,
+		FreeBlocks:  500000,
+		AvailBlocks: 450000,
+		TotalInodes: 100000,
+		FreeInodes:  90000,
+		BlockSize:   4096,
+		MaxNameLen:  255,
+	}
+	resp := &Response{Type: MsgStatfsResp, ID: 21, Statfs: info}
+	got := roundTripResponse(t, resp)
+	if got.Statfs == nil {
+		t.Fatal("Statfs is nil")
+	}
+	assertEqual(t, "TotalBlocks", got.Statfs.TotalBlocks, uint64(1000000))
+	assertEqual(t, "FreeBlocks", got.Statfs.FreeBlocks, uint64(500000))
+	assertEqual(t, "AvailBlocks", got.Statfs.AvailBlocks, uint64(450000))
+	assertEqual(t, "TotalInodes", got.Statfs.TotalInodes, uint64(100000))
+	assertEqual(t, "FreeInodes", got.Statfs.FreeInodes, uint64(90000))
+	assertEqual(t, "BlockSize", got.Statfs.BlockSize, uint32(4096))
+	assertEqual(t, "MaxNameLen", got.Statfs.MaxNameLen, uint32(255))
+}
+
+func TestResponseRoundTrip_StatfsNil(t *testing.T) {
+	resp := &Response{Type: MsgStatfsResp, ID: 22}
+	got := roundTripResponse(t, resp)
+	if got.Statfs != nil {
+		t.Error("Statfs should be nil")
+	}
+}
+
+func TestResponseRoundTrip_StatfsError(t *testing.T) {
+	resp := &Response{Type: MsgStatfsResp, ID: 23, Error: ErrPermission}
+	got := roundTripResponse(t, resp)
+	assertEqual(t, "Error", got.Error, ErrPermission)
+	if got.Statfs != nil {
+		t.Error("Statfs should be nil on error")
+	}
+}
+
+func TestResponseRoundTrip_SuccessNoPayloadNewTypes(t *testing.T) {
+	for _, typ := range []byte{MsgChownResp, MsgSymlinkResp, MsgLinkResp} {
+		resp := &Response{Type: typ, ID: 40}
+		got := roundTripResponse(t, resp)
+		assertEqual(t, "Type", got.Type, typ)
+		assertEqual(t, "Error", got.Error, "")
+	}
+}
+
 // --- Helpers ---
 
 func roundTripRequest(t *testing.T, req *Request) *Request {

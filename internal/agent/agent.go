@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
+	"runtime"
 	"time"
 
 	"github.com/Real-Fruit-Snacks/Spillway/internal/protocol"
@@ -152,9 +153,13 @@ func (a *Agent) serveConn(ctx context.Context, conn *transport.FramedConn) error
 	// Clear auth deadline.
 	conn.SetDeadline(time.Time{})
 
-	// Zero the PSK from memory — it is never used again after auth.
-	for i := range a.cfg.PSK {
-		a.cfg.PSK[i] = 0
+	// Zero the PSK from memory after auth. Only safe in bind mode
+	// (single-session); reverse mode may reconnect and needs the PSK again.
+	if a.cfg.Mode == "bind" {
+		for i := range a.cfg.PSK {
+			a.cfg.PSK[i] = 0
+		}
+		runtime.KeepAlive(&a.cfg.PSK)
 	}
 
 	mux := transport.NewServerMux(conn, a.handleRequest)

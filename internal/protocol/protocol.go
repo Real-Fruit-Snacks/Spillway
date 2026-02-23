@@ -31,6 +31,10 @@ const (
 	MsgTruncate  byte = 0x0B
 	MsgGetXattr  byte = 0x0C
 	MsgListXattr byte = 0x0D
+	MsgChown     byte = 0x0E
+	MsgSymlink   byte = 0x0F
+	MsgLink      byte = 0x10
+	MsgStatfs    byte = 0x11
 )
 
 // Message types — responses from agent to listener.
@@ -48,6 +52,10 @@ const (
 	MsgTruncateResp  byte = 0x8B
 	MsgGetXattrResp  byte = 0x8C
 	MsgListXattrResp byte = 0x8D
+	MsgChownResp     byte = 0x8E
+	MsgSymlinkResp   byte = 0x8F
+	MsgLinkResp      byte = 0x90
+	MsgStatfsResp    byte = 0x91
 )
 
 // Control message types.

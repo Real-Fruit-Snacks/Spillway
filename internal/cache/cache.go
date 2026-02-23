@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Real-Fruit-Snacks/Spillway/internal/protocol"
@@ -22,20 +23,27 @@ type entry struct {
 
 // Cache is a generic TTL cache for stat and directory listing results.
 type Cache struct {
-	mu        sync.RWMutex
-	statCache map[string]*entry
-	dirCache  map[string]*entry
-	statTTL   time.Duration
-	dirTTL    time.Duration
+	mu         sync.RWMutex
+	statCache  map[string]*entry
+	dirCache   map[string]*entry
+	statTTL    time.Duration
+	dirTTL     time.Duration
+	maxEntries int
+
+	StatHits   atomic.Int64
+	StatMisses atomic.Int64
+	DirHits    atomic.Int64
+	DirMisses  atomic.Int64
 }
 
 // New creates a Cache with the given TTLs.
 func New(statTTL, dirTTL time.Duration) *Cache {
 	return &Cache{
-		statCache: make(map[string]*entry),
-		dirCache:  make(map[string]*entry),
-		statTTL:   statTTL,
-		dirTTL:    dirTTL,
+		statCache:  make(map[string]*entry),
+		dirCache:   make(map[string]*entry),
+		statTTL:    statTTL,
+		dirTTL:     dirTTL,
+		maxEntries: 10000,
 	}
 }
 
@@ -45,8 +53,10 @@ func (c *Cache) GetStat(path string) (*protocol.FileStat, bool) {
 	e, ok := c.statCache[path]
 	c.mu.RUnlock()
 	if !ok || time.Now().After(e.expiry) {
+		c.StatMisses.Add(1)
 		return nil, false
 	}
+	c.StatHits.Add(1)
 	return e.value.(*protocol.FileStat), true
 }
 
@@ -54,6 +64,9 @@ func (c *Cache) GetStat(path string) (*protocol.FileStat, bool) {
 func (c *Cache) PutStat(path string, st *protocol.FileStat) {
 	c.mu.Lock()
 	c.statCache[path] = &entry{value: st, expiry: time.Now().Add(c.statTTL)}
+	for len(c.statCache) > c.maxEntries {
+		evictOldest(c.statCache)
+	}
 	c.mu.Unlock()
 }
 
@@ -63,8 +76,10 @@ func (c *Cache) GetDir(path string) ([]protocol.DirEntry, bool) {
 	e, ok := c.dirCache[path]
 	c.mu.RUnlock()
 	if !ok || time.Now().After(e.expiry) {
+		c.DirMisses.Add(1)
 		return nil, false
 	}
+	c.DirHits.Add(1)
 	return e.value.([]protocol.DirEntry), true
 }
 
@@ -72,7 +87,27 @@ func (c *Cache) GetDir(path string) ([]protocol.DirEntry, bool) {
 func (c *Cache) PutDir(path string, entries []protocol.DirEntry) {
 	c.mu.Lock()
 	c.dirCache[path] = &entry{value: entries, expiry: time.Now().Add(c.dirTTL)}
+	for len(c.dirCache) > c.maxEntries {
+		evictOldest(c.dirCache)
+	}
 	c.mu.Unlock()
+}
+
+// evictOldest removes the entry with the earliest expiry from m.
+func evictOldest(m map[string]*entry) {
+	var oldestKey string
+	var oldestTime time.Time
+	first := true
+	for k, e := range m {
+		if first || e.expiry.Before(oldestTime) {
+			oldestKey = k
+			oldestTime = e.expiry
+			first = false
+		}
+	}
+	if !first {
+		delete(m, oldestKey)
+	}
 }
 
 // InvalidatePath removes the stat and dir cache entries for the exact path.

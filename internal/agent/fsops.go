@@ -237,19 +237,80 @@ func handleTruncate(req *protocol.Request, jail *PathJail) *protocol.Response {
 }
 
 func handleGetXattr(req *protocol.Request, jail *PathJail) *protocol.Response {
-	_, errR := resolvePath(jail, req.Path, protocol.MsgGetXattrResp, req.ID)
+	resolved, errR := resolvePath(jail, req.Path, protocol.MsgGetXattrResp, req.ID)
 	if errR != nil {
 		return errR
 	}
-	return errResp(protocol.MsgGetXattrResp, req.ID, protocol.ErrNoSys)
+	data, err := getXattr(resolved, req.XattrName)
+	if err != nil {
+		return errResp(protocol.MsgGetXattrResp, req.ID, protocol.FromOSError(err))
+	}
+	return &protocol.Response{Type: protocol.MsgGetXattrResp, ID: req.ID, Data: data}
 }
 
 func handleListXattr(req *protocol.Request, jail *PathJail) *protocol.Response {
-	_, errR := resolvePath(jail, req.Path, protocol.MsgListXattrResp, req.ID)
+	resolved, errR := resolvePath(jail, req.Path, protocol.MsgListXattrResp, req.ID)
 	if errR != nil {
 		return errR
 	}
-	return errResp(protocol.MsgListXattrResp, req.ID, protocol.ErrNoSys)
+	names, err := listXattr(resolved)
+	if err != nil {
+		return errResp(protocol.MsgListXattrResp, req.ID, protocol.FromOSError(err))
+	}
+	return &protocol.Response{Type: protocol.MsgListXattrResp, ID: req.ID, Names: names}
+}
+
+func handleChown(req *protocol.Request, jail *PathJail) *protocol.Response {
+	resolved, errR := resolvePath(jail, req.Path, protocol.MsgChownResp, req.ID)
+	if errR != nil {
+		return errR
+	}
+	if err := os.Lchown(resolved, int(req.Uid), int(req.Gid)); err != nil {
+		return errResp(protocol.MsgChownResp, req.ID, protocol.FromOSError(err))
+	}
+	return &protocol.Response{Type: protocol.MsgChownResp, ID: req.ID}
+}
+
+func handleSymlink(req *protocol.Request, jail *PathJail) *protocol.Response {
+	// Path2 is the link name (must be inside jail). Path is the symlink target
+	// and is intentionally NOT jail-checked: the operator controls the listener
+	// and may legitimately create symlinks pointing outside the jail root.
+	// The jail still prevents reading through such links (EvalSymlinks in Resolve).
+	resolved, errR := resolvePath(jail, req.Path2, protocol.MsgSymlinkResp, req.ID)
+	if errR != nil {
+		return errR
+	}
+	if err := os.Symlink(req.Path, resolved); err != nil {
+		return errResp(protocol.MsgSymlinkResp, req.ID, protocol.FromOSError(err))
+	}
+	return &protocol.Response{Type: protocol.MsgSymlinkResp, ID: req.ID}
+}
+
+func handleLink(req *protocol.Request, jail *PathJail) *protocol.Response {
+	src, errR := resolvePath(jail, req.Path, protocol.MsgLinkResp, req.ID)
+	if errR != nil {
+		return errR
+	}
+	dst, errR2 := resolvePath(jail, req.Path2, protocol.MsgLinkResp, req.ID)
+	if errR2 != nil {
+		return errR2
+	}
+	if err := os.Link(src, dst); err != nil {
+		return errResp(protocol.MsgLinkResp, req.ID, protocol.FromOSError(err))
+	}
+	return &protocol.Response{Type: protocol.MsgLinkResp, ID: req.ID}
+}
+
+func handleStatfs(req *protocol.Request, jail *PathJail) *protocol.Response {
+	resolved, errR := resolvePath(jail, req.Path, protocol.MsgStatfsResp, req.ID)
+	if errR != nil {
+		return errR
+	}
+	info, err := statfs(resolved)
+	if err != nil {
+		return errResp(protocol.MsgStatfsResp, req.ID, protocol.FromOSError(err))
+	}
+	return &protocol.Response{Type: protocol.MsgStatfsResp, ID: req.ID, Statfs: info}
 }
 
 // isWriteOp returns true for message types that modify the filesystem.
@@ -257,7 +318,8 @@ func isWriteOp(typ byte) bool {
 	switch typ {
 	case protocol.MsgWriteFile, protocol.MsgMkdir, protocol.MsgRemove,
 		protocol.MsgRename, protocol.MsgChmod, protocol.MsgCreate,
-		protocol.MsgTruncate:
+		protocol.MsgTruncate, protocol.MsgChown, protocol.MsgSymlink,
+		protocol.MsgLink:
 		return true
 	}
 	return false
@@ -298,6 +360,14 @@ func dispatchRequest(req *protocol.Request, jail *PathJail, readOnly bool) *prot
 		return handleGetXattr(req, jail)
 	case protocol.MsgListXattr:
 		return handleListXattr(req, jail)
+	case protocol.MsgChown:
+		return handleChown(req, jail)
+	case protocol.MsgSymlink:
+		return handleSymlink(req, jail)
+	case protocol.MsgLink:
+		return handleLink(req, jail)
+	case protocol.MsgStatfs:
+		return handleStatfs(req, jail)
 	default:
 		return errResp(protocol.MsgError, req.ID, protocol.ErrInval)
 	}

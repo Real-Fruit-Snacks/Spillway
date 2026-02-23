@@ -140,6 +140,8 @@ build_one() {
     ldflags+=" -X main.cfgProxyAddr=${OPT_PROXY:-}"
     ldflags+=" -X main.cfgProxyUser=${OPT_PROXY_USER:-}"
     ldflags+=" -X main.cfgProxyPass=${OPT_PROXY_PASS:-}"
+    ldflags+=" -X main.cfgVersion=$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
+    ldflags+=" -X main.cfgBuildCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
     if [[ "${DRY_RUN}" == "1" ]]; then
         echo -e "${DIM}CGO_ENABLED=0 GOOS=${os} GOARCH=${arch} go build -tags agent -trimpath -ldflags \"${ldflags}\" -o ${output} ./cmd/spillway${RESET}"

@@ -13,4 +13,12 @@ type Bridge interface {
 	Mkdir(path string, mode uint32) error
 	Remove(path string) error
 	Rename(oldPath, newPath string) error
+	Chmod(path string, mode uint32) error
+	Truncate(path string, size int64) error
+	Chown(path string, uid, gid uint32) error
+	Symlink(target, linkName string) error
+	Link(oldPath, newPath string) error
+	Statfs(path string) (*protocol.StatfsInfo, error)
+	Getxattr(path, name string) ([]byte, error)
+	Listxattr(path string) ([]string, error)
 }

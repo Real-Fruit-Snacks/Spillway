@@ -1,6 +1,7 @@
 package fuse
 
 import (
+	"context"
 	"os"
 	"time"
 
@@ -23,6 +24,24 @@ func NewFS(bridge Bridge, readOnly bool) *FS {
 // Root returns the root directory node.
 func (f *FS) Root() (bazilfs.Node, error) {
 	return &Dir{path: "/", bridge: f.bridge, readOnly: f.readOnly}, nil
+}
+
+// Statfs returns filesystem statistics.
+func (f *FS) Statfs(ctx context.Context, req *bazil.StatfsRequest, resp *bazil.StatfsResponse) error {
+	info, err := f.bridge.Statfs("/")
+	if err != nil {
+		return mapErr(err)
+	}
+	if info != nil {
+		resp.Blocks = info.TotalBlocks
+		resp.Bfree = info.FreeBlocks
+		resp.Bavail = info.AvailBlocks
+		resp.Files = info.TotalInodes
+		resp.Ffree = info.FreeInodes
+		resp.Bsize = info.BlockSize
+		resp.Namelen = info.MaxNameLen
+	}
+	return nil
 }
 
 // knownProtocolErrors is the set of protocol error strings that have a
