@@ -134,6 +134,9 @@ func (a *Agent) runBind(ctx context.Context) error {
 func (a *Agent) serveConn(ctx context.Context, conn *transport.FramedConn) error {
 	defer conn.Close()
 
+	// Set a deadline for authentication to prevent hanging connections.
+	conn.SetDeadline(time.Now().Add(30 * time.Second))
+
 	// Authenticate: in reverse mode the agent performs auth; in bind mode it
 	// validates the incoming auth from the listener.
 	var authErr error
@@ -144,6 +147,14 @@ func (a *Agent) serveConn(ctx context.Context, conn *transport.FramedConn) error
 	}
 	if authErr != nil {
 		return fmt.Errorf("auth: %w", authErr)
+	}
+
+	// Clear auth deadline.
+	conn.SetDeadline(time.Time{})
+
+	// Zero the PSK from memory — it is never used again after auth.
+	for i := range a.cfg.PSK {
+		a.cfg.PSK[i] = 0
 	}
 
 	mux := transport.NewServerMux(conn, a.handleRequest)

@@ -3,6 +3,7 @@ package listener
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"path/filepath"
 	"sync/atomic"
 	"time"
@@ -46,6 +47,39 @@ func NewSession(id string, mux *transport.ClientMux, readOnly bool, cacheTTL tim
 // StartEviction starts the cache's background eviction goroutine.
 func (s *Session) StartEviction(ctx context.Context) {
 	s.cache.StartEviction(ctx)
+}
+
+// startKeepalive sends periodic MsgPing requests to the agent. If 3
+// consecutive pings fail the mux is closed, tearing down the session.
+func (s *Session) startKeepalive(ctx context.Context) {
+	go func() {
+		missed := 0
+		for {
+			// 30s ± 30% jitter
+			delta := float64(30*time.Second) * 0.3
+			offset := (rand.Float64()*2 - 1) * delta //nolint:gosec
+			sleep := 30*time.Second + time.Duration(offset)
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(sleep):
+			}
+
+			pingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			_, err := s.mux.Call(pingCtx, &protocol.Request{Type: protocol.MsgPing})
+			cancel()
+			if err != nil {
+				missed++
+				if missed >= 3 {
+					s.mux.Close()
+					return
+				}
+			} else {
+				missed = 0
+			}
+		}
+	}()
 }
 
 // Close marks the session disconnected and closes the underlying mux.

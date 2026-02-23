@@ -158,6 +158,7 @@ func (l *Listener) handleConn(ctx context.Context, conn net.Conn) error {
 
 	session := NewSession(sessionID, mux, l.cfg.ReadOnly, cacheTTL)
 	session.StartEviction(ctx)
+	session.startKeepalive(ctx)
 
 	mountpoint := l.cfg.MountPoint
 	if mountpoint == "" {

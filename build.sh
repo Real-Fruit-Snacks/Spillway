@@ -124,7 +124,7 @@ build_one() {
     local output="${BUILD_DIR}/${BINARY_NAME}-agent-${os}-${arch}${ext}"
 
     # Build ldflags
-    local ldflags="-s -w"
+    local ldflags="-s -w -buildid="
     ldflags+=" -X main.cfgMode=${MODE}"
     ldflags+=" -X main.cfgAddress=${ADDR}"
     ldflags+=" -X main.cfgPSK=${PSK}"

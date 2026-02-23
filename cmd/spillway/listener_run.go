@@ -110,6 +110,9 @@ func cmdListen(args []string) error {
 		return err
 	}
 
+	if pskB64 == "" {
+		return fmt.Errorf("--key is required (base64-encoded PSK from build output)")
+	}
 	psk, err := decodePSK(pskB64)
 	if err != nil {
 		return fmt.Errorf("invalid PSK: %w", err)
@@ -163,6 +166,9 @@ func cmdConnect(args []string) error {
 	}
 	addr := fs.Arg(0)
 
+	if pskB64 == "" {
+		return fmt.Errorf("--key is required (base64-encoded PSK from build output)")
+	}
 	psk, err := decodePSK(pskB64)
 	if err != nil {
 		return fmt.Errorf("invalid PSK: %w", err)
