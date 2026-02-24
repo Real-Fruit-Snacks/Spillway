@@ -2,6 +2,7 @@ package transport
 
 import (
 	"bufio"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net"
@@ -21,8 +22,8 @@ func (bc *bufferedConn) Read(p []byte) (int, error) {
 
 // DialViaProxy establishes a TCP tunnel through an HTTP CONNECT proxy.
 // proxyUser and proxyPass may be empty if the proxy requires no authentication.
-func DialViaProxy(proxyAddr, targetAddr, proxyUser, proxyPass string) (net.Conn, error) {
-	conn, err := net.Dial("tcp", proxyAddr)
+func DialViaProxy(ctx context.Context, proxyAddr, targetAddr, proxyUser, proxyPass string) (net.Conn, error) {
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", proxyAddr)
 	if err != nil {
 		return nil, fmt.Errorf("dial proxy %s: %w", proxyAddr, err)
 	}

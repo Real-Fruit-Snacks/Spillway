@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"container/list"
 	"context"
 	"strings"
 	"sync"
@@ -26,6 +27,10 @@ type Cache struct {
 	mu         sync.RWMutex
 	statCache  map[string]*entry
 	dirCache   map[string]*entry
+	statOrder  *list.List
+	statIndex  map[string]*list.Element
+	dirOrder   *list.List
+	dirIndex   map[string]*list.Element
 	statTTL    time.Duration
 	dirTTL     time.Duration
 	maxEntries int
@@ -41,6 +46,10 @@ func New(statTTL, dirTTL time.Duration) *Cache {
 	return &Cache{
 		statCache:  make(map[string]*entry),
 		dirCache:   make(map[string]*entry),
+		statOrder:  list.New(),
+		statIndex:  make(map[string]*list.Element),
+		dirOrder:   list.New(),
+		dirIndex:   make(map[string]*list.Element),
 		statTTL:    statTTL,
 		dirTTL:     dirTTL,
 		maxEntries: 10000,
@@ -63,9 +72,14 @@ func (c *Cache) GetStat(path string) (*protocol.FileStat, bool) {
 // PutStat stores a FileStat in the cache with statTTL expiry.
 func (c *Cache) PutStat(path string, st *protocol.FileStat) {
 	c.mu.Lock()
+	if el, ok := c.statIndex[path]; ok {
+		c.statOrder.Remove(el)
+	}
 	c.statCache[path] = &entry{value: st, expiry: time.Now().Add(c.statTTL)}
+	el := c.statOrder.PushBack(path)
+	c.statIndex[path] = el
 	for len(c.statCache) > c.maxEntries {
-		evictOldest(c.statCache)
+		c.evictFront(c.statCache, c.statOrder, c.statIndex)
 	}
 	c.mu.Unlock()
 }
@@ -86,35 +100,42 @@ func (c *Cache) GetDir(path string) ([]protocol.DirEntry, bool) {
 // PutDir stores a directory listing in the cache with dirTTL expiry.
 func (c *Cache) PutDir(path string, entries []protocol.DirEntry) {
 	c.mu.Lock()
+	if el, ok := c.dirIndex[path]; ok {
+		c.dirOrder.Remove(el)
+	}
 	c.dirCache[path] = &entry{value: entries, expiry: time.Now().Add(c.dirTTL)}
+	el := c.dirOrder.PushBack(path)
+	c.dirIndex[path] = el
 	for len(c.dirCache) > c.maxEntries {
-		evictOldest(c.dirCache)
+		c.evictFront(c.dirCache, c.dirOrder, c.dirIndex)
 	}
 	c.mu.Unlock()
 }
 
-// evictOldest removes the entry with the earliest expiry from m.
-func evictOldest(m map[string]*entry) {
-	var oldestKey string
-	var oldestTime time.Time
-	first := true
-	for k, e := range m {
-		if first || e.expiry.Before(oldestTime) {
-			oldestKey = k
-			oldestTime = e.expiry
-			first = false
-		}
+// evictFront pops the oldest entry from the FIFO queue and removes it from the map.
+func (c *Cache) evictFront(m map[string]*entry, order *list.List, index map[string]*list.Element) {
+	front := order.Front()
+	if front == nil {
+		return
 	}
-	if !first {
-		delete(m, oldestKey)
-	}
+	key := order.Remove(front).(string)
+	delete(m, key)
+	delete(index, key)
 }
 
 // InvalidatePath removes the stat and dir cache entries for the exact path.
 func (c *Cache) InvalidatePath(path string) {
 	c.mu.Lock()
 	delete(c.statCache, path)
+	if el, ok := c.statIndex[path]; ok {
+		c.statOrder.Remove(el)
+		delete(c.statIndex, path)
+	}
 	delete(c.dirCache, path)
+	if el, ok := c.dirIndex[path]; ok {
+		c.dirOrder.Remove(el)
+		delete(c.dirIndex, path)
+	}
 	c.mu.Unlock()
 }
 
@@ -124,11 +145,19 @@ func (c *Cache) InvalidatePrefix(prefix string) {
 	for k := range c.statCache {
 		if strings.HasPrefix(k, prefix) {
 			delete(c.statCache, k)
+			if el, ok := c.statIndex[k]; ok {
+				c.statOrder.Remove(el)
+				delete(c.statIndex, k)
+			}
 		}
 	}
 	for k := range c.dirCache {
 		if strings.HasPrefix(k, prefix) {
 			delete(c.dirCache, k)
+			if el, ok := c.dirIndex[k]; ok {
+				c.dirOrder.Remove(el)
+				delete(c.dirIndex, k)
+			}
 		}
 	}
 	c.mu.Unlock()
@@ -157,11 +186,19 @@ func (c *Cache) evict() {
 	for k, e := range c.statCache {
 		if now.After(e.expiry) {
 			delete(c.statCache, k)
+			if el, ok := c.statIndex[k]; ok {
+				c.statOrder.Remove(el)
+				delete(c.statIndex, k)
+			}
 		}
 	}
 	for k, e := range c.dirCache {
 		if now.After(e.expiry) {
 			delete(c.dirCache, k)
+			if el, ok := c.dirIndex[k]; ok {
+				c.dirOrder.Remove(el)
+				delete(c.dirIndex, k)
+			}
 		}
 	}
 	c.mu.Unlock()

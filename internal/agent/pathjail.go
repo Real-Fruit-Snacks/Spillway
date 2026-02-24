@@ -34,10 +34,19 @@ func NewPathJail(root string, excludes []string) *PathJail {
 // Resolve joins the jail root with remotePath, evaluates symlinks, and
 // verifies the result is still inside the root. Returns ErrJail on escape.
 //
-// Note: there is an inherent TOCTOU gap between Resolve and the subsequent
-// filesystem operation. This is unavoidable in userspace and mirrors the
-// behaviour of chroot-based sandboxes. Symlink races within the jail root
-// are mitigated by EvalSymlinks at resolve time.
+// SECURITY: There is an inherent TOCTOU (time-of-check-to-time-of-use) race
+// between path resolution and the subsequent filesystem operation. An attacker
+// with write access inside the jail could swap a path component for a symlink
+// after Resolve returns but before the caller opens the file. This limitation
+// is inherent to all userspace path-jailing approaches and mirrors the
+// behaviour of chroot(2) without pivot_root.
+//
+// Mitigations applied:
+//   - EvalSymlinks at resolve time collapses existing symlink chains.
+//   - Partial resolution handles not-yet-created paths safely.
+//
+// For stronger isolation, prefer OS-level namespaces (Linux mount namespaces)
+// or openat2(2) with RESOLVE_BENEATH when available.
 func (j *PathJail) Resolve(remotePath string) (string, error) {
 	if remotePath == "" {
 		return j.root, nil
@@ -82,6 +91,20 @@ func (j *PathJail) IsExcluded(path string) bool {
 		}
 	}
 	return false
+}
+
+// jailRelative strips the jail root prefix from an absolute path, returning
+// a path relative to the jail root. Relative paths and paths outside the jail
+// are returned unchanged.
+func (j *PathJail) jailRelative(absPath string) string {
+	if !filepath.IsAbs(absPath) {
+		return absPath
+	}
+	rel, err := filepath.Rel(j.root, absPath)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return absPath
+	}
+	return "/" + rel
 }
 
 // resolvePartial walks up from path until it finds an existing ancestor,

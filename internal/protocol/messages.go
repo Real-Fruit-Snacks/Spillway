@@ -57,6 +57,7 @@ type Request struct {
 	XattrName string // GetXattr name
 	Uid       uint32 // Chown uid
 	Gid       uint32 // Chown gid
+	Nonce     []byte // Auth nonce (MsgAuth only)
 }
 
 // Response is a protocol response from agent to listener.
@@ -227,6 +228,13 @@ func MarshalRequest(req *Request) []byte {
 	w := newWriter(64)
 	w.writeByte(req.Type)
 	w.writeUint32(req.ID)
+
+	// Auth messages carry a binary nonce instead of a path.
+	if req.Type == MsgAuth {
+		w.writeBytes(req.Nonce)
+		return w.bytes()
+	}
+
 	w.writeString(req.Path)
 
 	switch req.Type {
@@ -275,6 +283,15 @@ func UnmarshalRequest(data []byte) (*Request, error) {
 
 	// Control messages have no path.
 	if typ == MsgPing || typ == MsgPong {
+		return req, nil
+	}
+
+	// Auth messages carry a binary nonce instead of a path.
+	if typ == MsgAuth {
+		req.Nonce, err = r.readBytes()
+		if err != nil {
+			return nil, err
+		}
 		return req, nil
 	}
 

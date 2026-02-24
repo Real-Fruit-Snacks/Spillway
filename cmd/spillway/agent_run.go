@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/Real-Fruit-Snacks/Spillway/internal/agent"
 )
@@ -45,6 +46,14 @@ func runAgent() error {
 		rateBurst, _ = strconv.Atoi(cfgRateBurst)
 	}
 
+	var delay time.Duration
+	if cfgDelay != "" && cfgDelay != "0" {
+		delaySec, _ := strconv.Atoi(cfgDelay)
+		if delaySec > 0 {
+			delay = time.Duration(delaySec) * time.Second
+		}
+	}
+
 	cfg := agent.Config{
 		Mode:           cfgMode,
 		Address:        cfgAddress,
@@ -61,6 +70,7 @@ func runAgent() error {
 		ProxyUser:      cfgProxyUser,
 		ProxyPass:      cfgProxyPass,
 		ReadOnly:       cfgReadOnly == "true",
+		Delay:          delay,
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

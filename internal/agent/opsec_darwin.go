@@ -36,6 +36,8 @@ func selfDeleteBinary() {
 	}
 }
 
+func platformOpsec() {}
+
 func silenceOutput() {
 	devNull, err := os.OpenFile("/dev/null", os.O_WRONLY, 0)
 	if err != nil {

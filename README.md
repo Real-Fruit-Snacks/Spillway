@@ -314,6 +314,7 @@ All agent configuration is injected at compile time via `-ldflags -X`. The agent
 | Permissions | `--read-only` | Reject all write operations |
 | Opsec | `--procname NAME` | Process name masquerade (OS-aware default) |
 | Opsec | `--self-delete` | Delete binary after execution |
+| Opsec | `--delay N` | Startup delay in seconds (sandbox evasion, max 3600) |
 | Network | `--proxy ADDR` | HTTP CONNECT proxy address |
 | Network | `--rate-limit N` | Outbound bandwidth limit (tokens/sec) |
 | Network | `--rate-burst N` | Rate limit burst size |

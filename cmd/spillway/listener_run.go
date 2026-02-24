@@ -96,7 +96,7 @@ func cmdListen(args []string) error {
 
 	var port int
 	var mount, pskB64, certFile, keyFile string
-	var readOnly bool
+	var readOnly, quiet bool
 
 	fs.IntVar(&port, "port", 4444, "port to listen on")
 	fs.IntVar(&port, "p", 4444, "port to listen on (shorthand)")
@@ -108,6 +108,8 @@ func cmdListen(args []string) error {
 	fs.BoolVar(&readOnly, "r", false, "mount read-only (shorthand)")
 	fs.StringVar(&certFile, "cert", "", "TLS certificate PEM file")
 	fs.StringVar(&keyFile, "key-file", "", "TLS private key PEM file")
+	fs.BoolVar(&quiet, "quiet", false, "suppress per-connection logging")
+	fs.BoolVar(&quiet, "q", false, "suppress per-connection logging (shorthand)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -134,6 +136,7 @@ func cmdListen(args []string) error {
 		CertPEM:    certPEM,
 		KeyPEM:     keyPEM,
 		ReadOnly:   readOnly,
+		Quiet:      quiet,
 		CacheTTL:   5,
 	}
 
@@ -151,7 +154,7 @@ func cmdConnect(args []string) error {
 	fs := flag.NewFlagSet("connect", flag.ContinueOnError)
 
 	var mount, pskB64 string
-	var readOnly bool
+	var readOnly, quiet bool
 
 	fs.StringVar(&mount, "mount", "./mnt", "mount point")
 	fs.StringVar(&mount, "m", "./mnt", "mount point (shorthand)")
@@ -159,6 +162,8 @@ func cmdConnect(args []string) error {
 	fs.StringVar(&pskB64, "k", "", "pre-shared key (base64) (shorthand)")
 	fs.BoolVar(&readOnly, "read-only", false, "mount read-only")
 	fs.BoolVar(&readOnly, "r", false, "mount read-only (shorthand)")
+	fs.BoolVar(&quiet, "quiet", false, "suppress per-connection logging")
+	fs.BoolVar(&quiet, "q", false, "suppress per-connection logging (shorthand)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -183,6 +188,7 @@ func cmdConnect(args []string) error {
 		MountPoint:  mount,
 		PSK:         psk,
 		ReadOnly:    readOnly,
+		Quiet:       quiet,
 		CacheTTL:    5,
 	}
 

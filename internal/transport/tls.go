@@ -9,9 +9,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/Real-Fruit-Snacks/Spillway/internal/protocol"
 )
+
+// maxPSKLen is the maximum allowed pre-shared key length in bytes.
+const maxPSKLen = 256
 
 // AgentTLSConfig returns a TLS 1.3 client config that verifies the server
 // certificate by SHA-256 fingerprint rather than by CA chain.
@@ -19,15 +23,7 @@ import (
 // with colon separators (e.g. "aa:bb:cc:...").
 func AgentTLSConfig(sni string, fingerprint string) *tls.Config {
 	// Normalise fingerprint: strip colons, lower-case.
-	normalized := ""
-	for _, ch := range fingerprint {
-		if ch != ':' {
-			if ch >= 'A' && ch <= 'F' {
-				ch = ch + ('a' - 'A')
-			}
-			normalized += string(ch)
-		}
-	}
+	normalized := strings.ToLower(strings.NewReplacer(":", "").Replace(fingerprint))
 
 	cfg := &tls.Config{
 		ServerName:         sni,
@@ -79,15 +75,18 @@ func ListenerTLSConfig(certPEM, keyPEM []byte) (*tls.Config, error) {
 //
 // Round 1 (client challenges server):
 //  1. Generate 32-byte random nonce (clientNonce).
-//  2. Send MsgAuth with clientNonce in Path field.
+//  2. Send MsgAuth with clientNonce in Nonce field.
 //  3. Read MsgAuthResp — verify HMAC-SHA256(psk, clientNonce).
 //
 // Round 2 (server challenges client):
-//  4. Read MsgAuth with serverNonce in Path field.
+//  4. Read MsgAuth with serverNonce in Nonce field.
 //  5. Compute HMAC-SHA256(psk, serverNonce), send MsgAuthResp.
 func PerformAuth(conn *FramedConn, psk []byte) error {
 	if len(psk) == 0 {
 		return errors.New("auth: PSK must not be empty")
+	}
+	if len(psk) > maxPSKLen {
+		return errors.New("auth: PSK exceeds maximum length")
 	}
 	// Round 1: challenge the server.
 	clientNonce := make([]byte, 32)
@@ -96,9 +95,9 @@ func PerformAuth(conn *FramedConn, psk []byte) error {
 	}
 
 	req := &protocol.Request{
-		Type: protocol.MsgAuth,
-		ID:   0,
-		Path: string(clientNonce),
+		Type:  protocol.MsgAuth,
+		ID:    0,
+		Nonce: clientNonce,
 	}
 	if err := conn.WriteFrame(protocol.MarshalRequest(req)); err != nil {
 		return fmt.Errorf("auth: send client challenge: %w", err)
@@ -137,7 +136,7 @@ func PerformAuth(conn *FramedConn, psk []byte) error {
 		return fmt.Errorf("auth: unexpected challenge type 0x%02x", serverReq.Type)
 	}
 
-	mac := computeHMAC(psk, []byte(serverReq.Path))
+	mac := computeHMAC(psk, serverReq.Nonce)
 	clientResp := &protocol.Response{
 		Type: protocol.MsgAuthResp,
 		ID:   serverReq.ID,
@@ -163,6 +162,9 @@ func ValidateAuth(conn *FramedConn, psk []byte) error {
 	if len(psk) == 0 {
 		return errors.New("auth: PSK must not be empty")
 	}
+	if len(psk) > maxPSKLen {
+		return errors.New("auth: PSK exceeds maximum length")
+	}
 
 	// Round 1: respond to client's challenge.
 	frame, err := conn.ReadFrame()
@@ -177,7 +179,7 @@ func ValidateAuth(conn *FramedConn, psk []byte) error {
 		return fmt.Errorf("auth: unexpected request type 0x%02x", req.Type)
 	}
 
-	mac := computeHMAC(psk, []byte(req.Path))
+	mac := computeHMAC(psk, req.Nonce)
 	resp := &protocol.Response{
 		Type: protocol.MsgAuthResp,
 		ID:   req.ID,
@@ -194,9 +196,9 @@ func ValidateAuth(conn *FramedConn, psk []byte) error {
 	}
 
 	challenge := &protocol.Request{
-		Type: protocol.MsgAuth,
-		ID:   1,
-		Path: string(serverNonce),
+		Type:  protocol.MsgAuth,
+		ID:    1,
+		Nonce: serverNonce,
 	}
 	if err := conn.WriteFrame(protocol.MarshalRequest(challenge)); err != nil {
 		return fmt.Errorf("auth: send server challenge: %w", err)

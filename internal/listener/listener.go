@@ -106,7 +106,7 @@ func (l *Listener) runReverse(ctx context.Context) error {
 			return fmt.Errorf("accept: %w", err)
 		}
 		go func(c net.Conn) {
-			if err := l.handleConn(ctx, c); err != nil {
+			if err := l.handleConn(ctx, c); err != nil && !l.cfg.Quiet {
 				// Connection-level errors (auth failure, disconnect) are
 				// expected during normal operation — log to stderr.
 				fmt.Fprintf(os.Stderr, "session %s: %v\n", c.RemoteAddr(), err)
@@ -123,7 +123,14 @@ func (l *Listener) runBind(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
-	return l.handleConn(ctx, rawConn)
+	// TLS handshake — the agent presents an ephemeral self-signed cert,
+	// so we skip CA verification (PSK auth provides identity assurance).
+	tlsConn := tls.Client(rawConn, transport.AgentTLSConfig("", ""))
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		rawConn.Close()
+		return fmt.Errorf("tls handshake: %w", err)
+	}
+	return l.handleConn(ctx, tlsConn)
 }
 
 // handleConn authenticates, creates a Session, mounts FUSE, and blocks until

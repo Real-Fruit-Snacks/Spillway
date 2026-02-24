@@ -10,5 +10,6 @@ type ListenerConfig struct {
 	CertPEM     []byte
 	KeyPEM      []byte
 	ReadOnly    bool
-	CacheTTL    int // seconds, default 5
+	Quiet       bool // suppress per-connection error logging
+	CacheTTL    int  // seconds, default 5
 }

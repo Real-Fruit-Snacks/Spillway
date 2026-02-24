@@ -53,7 +53,7 @@ func handleStat(req *protocol.Request, jail *PathJail) *protocol.Response {
 	if info.Mode()&fs.ModeSymlink != 0 {
 		target, lerr := os.Readlink(resolved)
 		if lerr == nil {
-			st.LinkTarget = target
+			st.LinkTarget = jail.jailRelative(target)
 		}
 	}
 	return &protocol.Response{Type: protocol.MsgStatResp, ID: req.ID, Stat: st}
@@ -67,6 +67,10 @@ func handleReadDir(req *protocol.Request, jail *PathJail) *protocol.Response {
 	entries, err := os.ReadDir(resolved)
 	if err != nil {
 		return errResp(protocol.MsgReadDirResp, req.ID, protocol.FromOSError(err))
+	}
+	const maxDirEntries = 100000
+	if len(entries) > maxDirEntries {
+		entries = entries[:maxDirEntries]
 	}
 	dirEntries := make([]protocol.DirEntry, 0, len(entries))
 	for _, e := range entries {
@@ -128,10 +132,13 @@ func handleReadLink(req *protocol.Request, jail *PathJail) *protocol.Response {
 	return &protocol.Response{
 		Type: protocol.MsgReadLinkResp,
 		ID:   req.ID,
-		Stat: &protocol.FileStat{LinkTarget: target},
+		Stat: &protocol.FileStat{LinkTarget: jail.jailRelative(target)},
 	}
 }
 
+// handleWriteFile performs a partial write at the requested offset. It does not
+// truncate the file — full replacement is achieved by the FUSE layer issuing
+// Setattr (truncate) before Write. This is intentional, not a bug.
 func handleWriteFile(req *protocol.Request, jail *PathJail) *protocol.Response {
 	resolved, errR := resolvePath(jail, req.Path, protocol.MsgWriteFileResp, req.ID)
 	if errR != nil {

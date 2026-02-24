@@ -18,6 +18,10 @@ handler_*.sh
 CLAUDE.md
 .claude/
 .omc/
+AGENTS.md
+**/AGENTS.md
+CODE_REVIEW.md
+EVASION_PLAN.md
 .cursorignore
 .cursorules
 .cursorrules

@@ -8,4 +8,6 @@ func masqueradeProcess(name string) {}
 
 func selfDeleteBinary() {}
 
+func platformOpsec() {}
+
 func silenceOutput() {}
