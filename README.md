@@ -6,10 +6,10 @@
 
 [![Go 1.22+](https://img.shields.io/badge/go-1.22+-00ADD8.svg)](https://go.dev/dl/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-2196F3.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-122%20passing-brightgreen.svg)](internal/)
+[![Tests](https://img.shields.io/badge/tests-133%20passing-brightgreen.svg)](internal/)
 [![CGO](https://img.shields.io/badge/CGO-disabled-orange.svg)]()
 
-Spillway is a reverse/bind FUSE filesystem mount for penetration testing. Deploy a small agent on the target, mount its entire filesystem locally via FUSE, and browse with standard tools — over TLS 1.3 with mutual PSK authentication. Think of it as SSHFS without SSH, built for offense.
+Spillway is a reverse/bind/dormant FUSE filesystem mount for penetration testing. Deploy a small agent on the target, mount its entire filesystem locally via FUSE, and browse with standard tools — over TLS 1.3 with mutual PSK authentication. Think of it as SSHFS without SSH, built for offense.
 
 </div>
 
@@ -27,7 +27,6 @@ Spillway is a reverse/bind FUSE filesystem mount for penetration testing. Deploy
 - [Example Output](#example-output)
 - [Without vs With](#without-vs-with)
 - [Testing](#testing)
-- [Contributing](#contributing)
 
 ---
 
@@ -427,7 +426,7 @@ strings ./target/opt/app/binary | grep -i key
 ## Testing
 
 ```bash
-go test ./...                  # All 122 tests
+go test ./...                  # All 133 tests
 go test -tags agent ./...      # Agent-side tests
 go test -race ./...            # Race detector
 go vet ./...                   # Static analysis
@@ -444,6 +443,6 @@ make test                      # Makefile target
 
 [GitHub](https://github.com/Real-Fruit-Snacks/Spillway) | [License (MIT)](LICENSE) | [Report Issue](https://github.com/Real-Fruit-Snacks/Spillway/issues)
 
-*Spillway — reverse/bind FUSE filesystem mount*
+*Spillway — reverse/bind/dormant FUSE filesystem mount*
 
 </div>
