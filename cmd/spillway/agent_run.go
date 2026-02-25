@@ -54,6 +54,12 @@ func runAgent() error {
 		}
 	}
 
+	var knockPort uint16
+	if cfgKnockPort != "" {
+		kp, _ := strconv.Atoi(cfgKnockPort)
+		knockPort = uint16(kp)
+	}
+
 	cfg := agent.Config{
 		Mode:           cfgMode,
 		Address:        cfgAddress,
@@ -71,6 +77,7 @@ func runAgent() error {
 		ProxyPass:      cfgProxyPass,
 		ReadOnly:       cfgReadOnly == "true",
 		Delay:          delay,
+		KnockPort:      knockPort,
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

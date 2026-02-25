@@ -951,8 +951,8 @@
             <div class="features-grid">
                 <div class="feature-card">
                     <span class="feature-icon">&#x21C4;</span>
-                    <h3>Reverse &amp; Bind</h3>
-                    <p>Agent calls back to your listener (reverse) or listens for your connection (bind). Both modes over TLS 1.3.</p>
+                    <h3>Reverse, Bind &amp; Dormant</h3>
+                    <p>Agent calls back (reverse), listens (bind), or waits for an authenticated knock then calls back (dormant). All modes over TLS 1.3.</p>
                 </div>
                 <div class="feature-card">
                     <span class="feature-icon">&#x1F512;</span>
@@ -1322,6 +1322,7 @@
                     <p>Use <code>--all</code> to build for all 5 platforms at once. Use <code>--compress</code> to UPX-pack the binary. Use <code>--dry-run</code> to preview the build command without executing.</p>
                     <p>The listener binary is built separately with <code>make listener</code> &mdash; it includes the FUSE mount, CLI, and session management. The agent binary is minimal: stdlib only, zero runtime args.</p>
                     <p>For bind mode, the agent listens and you connect: <code>./build.sh bind 0.0.0.0:8443</code> then <code>./bin/spillway connect TARGET:8443</code>.</p>
+                    <p>For dormant mode, the agent sits silent with no open ports until you send an authenticated knock: <code>./build.sh dormant 10.10.14.5:443 --knock-port 49152</code> then <code>./bin/spillway knock TARGET --port 49152 --key PSK</code>.</p>
                     <p style="margin-top: 24px; font-size: 13px; color: var(--ctp-overlay1);">Built for offense. Encrypted by default.</p>
                 </div>
             </div>
@@ -1329,13 +1330,13 @@
 
         <!-- FOOTER -->
         <footer class="site-footer">
-            <div class="footer-tagline">Spillway &mdash; reverse/bind FUSE filesystem mount</div>
+            <div class="footer-tagline">Spillway &mdash; reverse/bind/dormant FUSE filesystem mount</div>
             <div class="footer-links">
                 <a href="https://github.com/Real-Fruit-Snacks/Spillway">GitHub</a>
                 <a href="https://github.com/Real-Fruit-Snacks/Spillway/blob/main/LICENSE">License</a>
                 <a href="https://github.com/Real-Fruit-Snacks/Spillway/issues">Report Issue</a>
             </div>
-            <div class="footer-copy">Spillway &mdash; reverse/bind FUSE filesystem mount</div>
+            <div class="footer-copy">Spillway &mdash; reverse/bind/dormant FUSE filesystem mount</div>
             <div class="footer-disclaimer">
                 For authorized security testing, CTF competitions, and educational purposes only. Always obtain proper authorization before testing on systems you do not own.
             </div>

