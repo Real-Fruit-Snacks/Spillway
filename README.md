@@ -438,22 +438,6 @@ make test                      # Makefile target
 
 ---
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make changes
-4. Run `go test -race ./... && golangci-lint run ./...` — both must pass
-5. Commit with descriptive message
-6. Open a Pull Request
-
-- Go 1.22+ with `gofmt` formatting
-- Catppuccin Mocha color palette for all terminal output
-- Agent binary must remain CGO_ENABLED=0 with zero external deps
-- All agent config via `-ldflags -X` — no runtime args or env vars
-
----
-
 <div align="center">
 
 **Built for offense. Encrypted by default.**
