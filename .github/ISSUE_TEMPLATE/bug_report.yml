@@ -1,0 +1,79 @@
+name: Bug Report
+description: Report a bug in Spillway
+labels: ["bug"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug. Please fill out the information below to help us investigate.
+
+  - type: input
+    id: version
+    attributes:
+      label: Spillway Version
+      description: "Git commit hash or release tag"
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS / Platform
+      description: "Operating system and architecture"
+      placeholder: "Ubuntu 24.04 x86_64 / Windows 11 / macOS 15 ARM64"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: "Which component is affected?"
+      options:
+        - Agent (reverse mode)
+        - Agent (bind mode)
+        - Agent (dormant mode)
+        - Listener / FUSE mount
+        - Build script
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: "Provide the exact steps to reproduce the bug"
+      placeholder: |
+        1. Build agent with `./build.sh reverse 10.10.14.5:443`
+        2. Start listener with `./bin/spillway listen --port 443 --mount ./target`
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: "What did you expect to happen?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: "What actually happened?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Output
+      description: "Paste any relevant logs, error messages, or terminal output"
+      render: shell
+    validations:
+      required: false
